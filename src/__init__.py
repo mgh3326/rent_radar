@@ -1,0 +1,1 @@
+"""Rent radar application package."""

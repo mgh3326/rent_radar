@@ -1,0 +1,112 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: rent-radar-postgres
+    environment:
+      POSTGRES_USER: rent
+      POSTGRES_PASSWORD: rent_password
+      POSTGRES_DB: rent_finder
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rent -d rent_finder"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: rent-radar-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rent-radar-api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rent:rent_password@postgres:5432/rent_finder
+      REDIS_URL: redis://redis:6379/0
+      PUBLIC_DATA_API_KEY: ${PUBLIC_DATA_API_KEY:-}
+      APP_ENV: ${APP_ENV:-local}
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Waiting for postgres...' &&
+        until pg_isready -h postgres -U rent -d rent_finder; do sleep 1; done &&
+        echo 'Postgres is ready' &&
+        echo 'Running alembic upgrade...' &&
+        alembic upgrade head &&
+        echo 'Alembic upgrade complete' &&
+        echo 'Starting uvicorn server...' &&
+        uvicorn src.main:app --host 0.0.0.0 --port 8000
+      "
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rent-radar-worker
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rent:rent_password@postgres:5432/rent_finder
+      REDIS_URL: redis://redis:6379/0
+      PUBLIC_DATA_API_KEY: ${PUBLIC_DATA_API_KEY:-}
+      APP_ENV: ${APP_ENV:-local}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Waiting for postgres...' &&
+        until pg_isready -h postgres -U rent -d rent_finder; do sleep 1; done &&
+        echo 'Waiting for redis...' &&
+        until redis-cli -h redis ping; do sleep 1; done &&
+        echo 'Starting taskiq worker...' &&
+        taskiq worker src.taskiq_app.worker:broker
+      "
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rent-radar-scheduler
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rent:rent_password@postgres:5432/rent_finder
+      REDIS_URL: redis://redis:6379/0
+      PUBLIC_DATA_API_KEY: ${PUBLIC_DATA_API_KEY:-}
+      APP_ENV: ${APP_ENV:-local}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    command: >
+      sh -c "
+        echo 'Waiting for postgres...' &&
+        until pg_isready -h postgres -U rent -d rent_finder; do sleep 1; done &&
+        echo 'Waiting for redis...' &&
+        until redis-cli -h redis ping; do sleep 1; done &&
+        echo 'Starting taskiq scheduler...' &&
+        python -c 'from src.taskiq_app.broker import scheduler; import asyncio; asyncio.run(scheduler.startup())'
+      "
+
+volumes:
+  postgres_data:

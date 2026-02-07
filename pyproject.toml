@@ -1,0 +1,27 @@
+[project]
+name = "rent-radar"
+version = "0.1.0"
+description = "Rent finder MCP server for Korean rental listings"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "mcp[cli]>=1.0",
+    "taskiq>=0.12",
+    "taskiq-redis>=1.0",
+    "taskiq-fastapi>=0.4",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "httpx>=0.28",
+    "beautifulsoup4>=4.12",
+    "pydantic-settings>=2.0",
+    "redis[hiredis]>=5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-anyio>=0.0.0",
+    "taskiq[reload]",
+]
