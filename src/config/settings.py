@@ -20,9 +20,9 @@ class Settings(BaseSettings):
     app_env: str = "local"
 
     database_url: str = (
-        "postgresql+asyncpg://rent:rent_password@localhost:5432/rent_finder"
+        "postgresql+asyncpg://rent:rent_password@localhost:5433/rent_finder"
     )
-    redis_url: str = "redis://localhost:6379/0"
+    redis_url: str = "redis://localhost:6380/0"
     taskiq_testing: bool = False
 
     public_data_api_key: str = ""
@@ -44,6 +44,8 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             parsed = [code.strip() for code in value.split(",") if code.strip()]
             return parsed or ["11110"]
+        if isinstance(value, (int, float)):
+            return [str(int(value))]
         if isinstance(value, list):
             parsed = [str(item).strip() for item in value if str(item).strip()]
             return parsed or ["11110"]

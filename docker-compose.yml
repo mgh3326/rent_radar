@@ -1,3 +1,4 @@
+name: rent-radar
 services:
   postgres:
     image: postgres:16-alpine
@@ -7,9 +8,10 @@ services:
       POSTGRES_PASSWORD: rent_password
       POSTGRES_DB: rent_finder
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rent -d rent_finder"]
       interval: 5s
@@ -20,7 +22,7 @@ services:
     image: redis:7-alpine
     container_name: rent-radar-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -37,6 +39,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       PUBLIC_DATA_API_KEY: ${PUBLIC_DATA_API_KEY:-}
       APP_ENV: ${APP_ENV:-local}
+      TARGET_REGION_CODES: "${TARGET_REGION_CODES:-11110}"
     ports:
       - "8001:8000"
     depends_on:
@@ -66,6 +69,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       PUBLIC_DATA_API_KEY: ${PUBLIC_DATA_API_KEY:-}
       APP_ENV: ${APP_ENV:-local}
+      TARGET_REGION_CODES: "${TARGET_REGION_CODES:-11110}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,6 +95,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       PUBLIC_DATA_API_KEY: ${PUBLIC_DATA_API_KEY:-}
       APP_ENV: ${APP_ENV:-local}
+      TARGET_REGION_CODES: "${TARGET_REGION_CODES:-11110}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -105,7 +110,7 @@ services:
         echo 'Waiting for redis...' &&
         until redis-cli -h redis ping; do sleep 1; done &&
         echo 'Starting taskiq scheduler...' &&
-        python -c 'from src.taskiq_app.broker import scheduler; import asyncio; asyncio.run(scheduler.startup())'
+        taskiq scheduler src.taskiq_app.broker:scheduler
       "
 
 volumes:
