@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}매물 목록 - Rent Radar{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>🏠 매물 목록</h1>
+
+    <form action="/web/listings" method="get" class="filters">
+        <div>
+            <label>지역:</label>
+            <select name="region_code">
+                <option value="">전체</option>
+                {% for sido, districts in sido_sigungu.items() %}
+                    <optgroup label="{{ sido }}">
+                        {% for code, name in districts %}
+                            <option value="{{ code }}" {% if filters.region_code == code %}selected{% endif %}>
+                                {{ name }}
+                            </option>
+                        {% endfor %}
+                    </optgroup>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label>동:</label>
+            <input type="text" name="dong" value="{{ filters.dong }}" placeholder="예: 사직동">
+        </div>
+        <div>
+            <label>매물유형:</label>
+            <select name="property_type">
+                <option value="">전체</option>
+                <option value="apt" {% if filters.property_type == 'apt' %}selected{% endif %}>아파트</option>
+                <option value="villa" {% if filters.property_type == 'villa' %}selected{% endif %}>연립다세대</option>
+                <option value="officetel" {% if filters.property_type == 'officetel' %}selected{% endif %}>오피스텔</option>
+            </select>
+        </div>
+        <div>
+            <label>전세유형:</label>
+            <select name="rent_type">
+                <option value="">전체</option>
+                <option value="jeonse" {% if filters.rent_type == 'jeonse' %}selected{% endif %}>전세</option>
+                <option value="monthly" {% if filters.rent_type == 'monthly' %}selected{% endif %}>월세</option>
+            </select>
+        </div>
+        <div>
+            <label>소스:</label>
+            <select name="source">
+                <option value="naver" {% if filters.source == 'naver' %}selected{% endif %}>네이버</option>
+                <option value="zigbang" {% if filters.source == 'zigbang' %}selected{% endif %}>직방</option>
+            </select>
+        </div>
+        <button type="submit" class="primary">검색</button>
+    </form>
+
+    {% if listings %}
+        <div class="results-header">
+            <p>총 {{ listings | length }}건의 매물이 검색되었습니다.</p>
+        </div>
+
+        <div class="listings-grid">
+            {% for listing in listings %}
+            <div class="listing-card">
+                <div class="listing-header">
+                    <h3>{{ listing.apt_name }}</h3>
+                    <div class="listing-meta">
+                        <span class="badge">{{ listing.rent_type }}</span>
+                        <span class="badge">{{ listing.source }}</span>
+                        <span class="location">{{ listing.dong }}</span>
+                    </div>
+                    <button class="favorite-btn" data-id="{{ listing.id }}">❤️</button>
+                </div>
+                <div class="listing-details">
+                    <div class="detail-row">
+                        <span>보증금:</span>
+                        <span class="price">{{ "{:,}".format(listing.deposit) }}만원</span>
+                    </div>
+                    {% if listing.monthly_rent > 0 %}
+                    <div class="detail-row">
+                        <span>월세:</span>
+                        <span class="price">{{ "{:,}".format(listing.monthly_rent) }}만원</span>
+                    </div>
+                    {% endif %}
+                    <div class="detail-row">
+                        <span>면적:</span>
+                        <span class="value">{{ listing.area_m2 }}㎡</span>
+                    </div>
+                    <div class="detail-row">
+                        <span>층:</span>
+                        <span class="value">{{ listing.floor }}층</span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="pagination">
+            <a href="?page=1">처음</a>
+        </div>
+    {% else %}
+        {% if crawl_status == 'enqueued' %}
+        <div class="alert alert-success">
+            크롤링 작업이 시작되었습니다. 잠시 후 새로고침하세요.
+        </div>
+        {% elif crawl_status == 'duplicate' %}
+        <div class="alert alert-warning">
+            이미 크롤링 작업이 진행 중입니다.
+        </div>
+        {% endif %}
+
+        <div class="no-results">
+            <div class="no-results-icon">🔍</div>
+            <p class="no-results-text">검색 결과가 없습니다.</p>
+            <p class="no-results-hint">아직 매물 데이터가 수집되지 않았거나, 검색 조건에 맞는 매물이 없습니다.</p>
+            <form action="/web/crawl-listings" method="post" class="no-results-actions">
+                <input type="hidden" name="source" value="{{ filters.source }}">
+                <button type="submit" class="primary">매물 수집 시작</button>
+            </form>
+        </div>
+    {% endif %}
+
+    <script>
+        // Favorite toggle
+        document.querySelectorAll('.favorite-btn').forEach(function(btn) {
+            btn.addEventListener('click', async function(e) {
+                e.preventDefault();
+                const id = this.dataset.id;
+                const isActive = this.classList.contains('active');
+
+                try {
+                    const response = await fetch(`/web/favorites/${id}`, {
+                        method: 'POST',
+                    });
+
+                    if (response.ok) {
+                        this.classList.toggle('active');
+                        const msg = isActive ? '즐검 목록에서 제거되었습니다.' : '즐검 목록에 추가되었습니다.';
+                        alert(msg);
+                    }
+                } catch (err) {
+                    console.error('Favorite toggle failed:', err);
+                    alert('오류가 발생했습니다.');
+                }
+            });
+        });
+    </script>
+{% endblock %}

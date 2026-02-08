@@ -40,7 +40,7 @@ async def test_price_service_get_real_price(monkeypatch: pytest.MonkeyPatch) -> 
 
     service = PriceService(cast(AsyncSession, object()))
     rows = await service.get_real_price(
-        region="마포구", dong="아현동", property_type="apt", period_months=6
+        region_code="11140", dong="아현동", property_type="apt", period_months=6
     )
 
     assert len(rows) == 1
@@ -70,7 +70,7 @@ async def test_price_service_get_price_trend(monkeypatch: pytest.MonkeyPatch) ->
 
     service = PriceService(cast(AsyncSession, object()))
     trend = await service.get_price_trend(
-        region="마포구", dong=None, property_type="apt", period_months=12
+        region_code="11140", dong=None, property_type="apt", period_months=12
     )
 
     assert trend == [
@@ -82,3 +82,43 @@ async def test_price_service_get_price_trend(monkeypatch: pytest.MonkeyPatch) ->
             "trade_count": 14,
         }
     ]
+
+
+@pytest.mark.anyio
+async def test_price_service_get_real_price_with_villa(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PriceService filters by property_type (villa)."""
+
+    sample_row = RealTrade(
+        id=1,
+        property_type="villa",
+        rent_type="jeonse",
+        region_code="11110",
+        dong="아현동",
+        apt_name="테스트연립",
+        deposit=25000,
+        monthly_rent=0,
+        area_m2=Decimal("64.5"),
+        floor=4,
+        contract_year=2026,
+        contract_month=1,
+        contract_day=5,
+    )
+
+    async def fake_fetch_real_prices(*args: object, **kwargs: object):  # noqa: ARG001
+        return [sample_row]
+
+    monkeypatch.setattr(
+        "src.services.price_service.fetch_real_prices", fake_fetch_real_prices
+    )
+
+    service = PriceService(cast(AsyncSession, object()))
+    rows = await service.get_real_price(
+        region_code="11140", dong="아현동", property_type="villa", period_months=6
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["property_type"] == "villa"
+    assert rows[0]["apt_name"] == "테스트연립"
+    assert rows[0]["deposit"] == 25000

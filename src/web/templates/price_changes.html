@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}가격 변동 - Rent Radar{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>📈 가격 변동</h1>
+
+    <form action="/web/price-changes" method="get" class="filters">
+        <div>
+            <label>지역:</label>
+            <select name="region_code">
+                <option value="">전체</option>
+                {% for sido, districts in sido_sigungu.items() %}
+                    <optgroup label="{{ sido }}">
+                        {% for code, name in districts %}
+                            <option value="{{ code }}" {% if filters.region_code == code %}selected{% endif %}>
+                                {{ name }}
+                            </option>
+                        {% endfor %}
+                    </optgroup>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label>동:</label>
+            <input type="text" name="dong" value="{{ filters.dong }}" placeholder="예: 사직동">
+        </div>
+        <div>
+            <label>매물유형:</label>
+            <select name="property_type">
+                <option value="">전체</option>
+                <option value="apt" {% if filters.property_type == 'apt' %}selected{% endif %}>아파트</option>
+                <option value="villa" {% if filters.property_type == 'villa' %}selected{% endif %}>연립다세대</option>
+                <option value="officetel" {% if filters.property_type == 'officetel' %}selected{% endif %}>오피스텔</option>
+            </select>
+        </div>
+        <div>
+            <label>기간:</label>
+            <select name="days">
+                <option value="7" {% if filters.days == 7 %}selected{% endif %}>7일</option>
+                <option value="15" {% if filters.days == 15 %}selected{% endif %}>15일</option>
+                <option value="30" {% if filters.days == 30 %}selected{% endif %}>30일</option>
+                <option value="60" {% if filters.days == 60 %}selected{% endif %}>60일</option>
+            </select>
+        </div>
+        <button type="submit" class="primary">검색</button>
+    </form>
+
+    {% if price_changes %}
+        <div class="results-header">
+            <p>최근 {{ filters.days }}일 동안 {{ price_changes | length }}건의 가격 변동이 있었습니다.</p>
+        </div>
+
+        <div class="price-changes-list">
+            {% for change in price_changes %}
+            <div class="change-card">
+                <div class="change-header">
+                    <h3>{{ change.apt_name }}</h3>
+                    <div class="change-meta">
+                        <span class="badge">{{ change.rent_type }}</span>
+                        <span class="location">{{ change.dong }}</span>
+                        <span class="date">{{ change.contract_year }}.{{ "{:02d}".format(change.contract_month) }}.{{ "{:02d}".format(change.contract_day) }}</span>
+                    </div>
+                </div>
+                <div class="change-details">
+                    <div class="change-row">
+                        <span class="label">{{ change.rent_type }} 보증금:</span>
+                        <span class="price old">{{ "{:,}".format(change.old_deposit) }}만원</span>
+                        <span class="arrow">→</span>
+                        <span class="price new">{{ "{:,}".format(change.new_deposit) }}만원</span>
+                    </div>
+                    {% if change.rent_type == 'monthly' %}
+                    <div class="change-row">
+                        <span class="label">월세:</span>
+                        <span class="price old">{{ "{:,}".format(change.old_monthly_rent) }}만원</span>
+                        <span class="arrow">→</span>
+                        <span class="price new">{{ "{:,}".format(change.new_monthly_rent) }}만원</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="no-results">
+            <p>검색 결과가 없습니다.</p>
+        </div>
+    {% endif %}
+
+    <style>
+        .price-changes-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .change-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            background: #f9fafb;
+        }
+
+        .change-header {
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 15px;
+            margin-bottom: 15px;
+        }
+
+        .change-header h3 {
+            margin: 0;
+            font-size: 18px;
+            color: #1f2937;
+        }
+
+        .change-meta {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .change-details {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .change-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .label {
+            font-weight: bold;
+            color: #6b7280;
+        }
+
+        .price {
+            font-size: 16px;
+        }
+
+        .old {
+            text-decoration: line-through;
+            color: #9ca3af;
+        }
+
+        .new {
+            color: #059669;
+            font-weight: bold;
+        }
+
+        .arrow {
+            font-size: 18px;
+            color: #9ca3af;
+        }
+    </style>
+{% endblock %}

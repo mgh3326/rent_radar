@@ -14,7 +14,7 @@ class PriceService:
     async def get_real_price(
         self,
         *,
-        region: str,
+        region_code: str | None,
         dong: str | None,
         property_type: str,
         period_months: int,
@@ -23,7 +23,7 @@ class PriceService:
 
         rows = await fetch_real_prices(
             self._session,
-            region=region,
+            region_code=region_code,
             dong=dong,
             property_type=property_type,
             period_months=period_months,
@@ -50,7 +50,7 @@ class PriceService:
     async def get_price_trend(
         self,
         *,
-        region: str,
+        region_code: str | None,
         dong: str | None,
         property_type: str,
         period_months: int,
@@ -59,7 +59,7 @@ class PriceService:
 
         rows = await fetch_price_trend(
             self._session,
-            region=region,
+            region_code=region_code,
             dong=dong,
             property_type=property_type,
             period_months=period_months,

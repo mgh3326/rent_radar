@@ -44,3 +44,19 @@ async def acquire_dedup_lock(key: str, ttl_seconds: int) -> bool:
         return bool(locked)
     finally:
         await client.aclose()
+
+
+async def release_dedup_lock(key: str) -> None:
+    """Release distributed lock by deleting the key."""
+
+    settings = get_settings()
+
+    if settings.taskiq_testing:
+        _MEMORY_LOCKS.pop(key, None)
+        return
+
+    client = Redis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
+    try:
+        await client.delete(key)
+    finally:
+        await client.aclose()

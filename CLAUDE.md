@@ -108,9 +108,12 @@ alembic downgrade -1                          # 롤백
 
 선택 변수:
 - `APP_ENV` — 실행 환경 (local/development/production)
+- `TARGET_PROPERTY_TYPES` — 수집 대상 매물유형 (쉼표 구분, 기본: apt)
+  - 유효값: `apt` (아파트), `villa` (연립다세대), `officetel` (오피스텔)
 - `TARGET_REGION_CODES` — 수집 대상 지역코드 (쉼표 구분, 기본: 11110 종로구)
 - `PUBLIC_DATA_FETCH_MONTHS` — 수집 기간 (1~24개월, 기본: 2)
 - `PUBLIC_DATA_REQUEST_TIMEOUT_SECONDS` — API 요청 타임아웃 (기본: 10.0)
+- `PUBLIC_DATA_API_BASE_URL` — 공공데이터포털 API 베이스 URL (기본: https://apis.data.go.kr/1613000/)
 
 ## 주요 컨벤션
 

@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}관심 매물 - Rent Radar{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>❤️ 관심 매물</h1>
+
+    {% if favorites %}
+        <div class="results-header">
+            <p>총 {{ favorites | length }}개의 관심 매물이 있습니다.</p>
+        </div>
+
+        <div class="favorites-grid">
+            {% for fav in favorites %}
+            <div class="listing-card">
+                <div class="listing-header">
+                    <h3>{{ fav.apt_name }}</h3>
+                    <div class="listing-meta">
+                        <span class="badge">{{ fav.rent_type }}</span>
+                        <span class="badge">{{ fav.source }}</span>
+                        <span class="location">{{ fav.dong }}</span>
+                    </div>
+                    <button class="remove-fav-btn" data-id="{{ fav.id }}">🗑️</button>
+                </div>
+                <div class="listing-details">
+                    <div class="detail-row">
+                        <span>보증금:</span>
+                        <span class="price">{{ "{:,}".format(fav.deposit) }}만원</span>
+                    </div>
+                    {% if fav.monthly_rent > 0 %}
+                    <div class="detail-row">
+                        <span>월세:</span>
+                        <span class="price">{{ "{:,}".format(fav.monthly_rent) }}만원</span>
+                    </div>
+                    {% endif %}
+                    <div class="detail-row">
+                        <span>면적:</span>
+                        <span class="value">{{ fav.area_m2 }}㎡</span>
+                    </div>
+                    <div class="detail-row">
+                        <span>층:</span>
+                        <span class="value">{{ fav.floor }}층</span>
+                    </div>
+                    <div class="detail-row">
+                        <span>계약일:</span>
+                        <span class="value">
+                            {{ fav.contract_year }}.{{ "{:02d}".format(fav.contract_month) }}.{{ "{:02d}".format(fav.contract_day) }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="no-results">
+            <p>관심 매물이 없습니다.</p>
+            <p>매물 목록에서 매물을 추가하고 관심 매물을 생성하세요.</p>
+        </div>
+    {% endif %}
+
+    <script>
+        // Remove from favorites
+        document.querySelectorAll('.remove-fav-btn').forEach(function(btn) {
+            btn.addEventListener('click', async function(e) {
+                e.preventDefault();
+                const id = this.dataset.id;
+
+                if (confirm('관심 매물에서 제거하시겠습니까?')) {
+                    try {
+                        const response = await fetch(`/web/favorites/${id}`, {
+                            method: 'POST',
+                        });
+
+                        if (response.ok) {
+                            location.reload();
+                        }
+                    } catch (err) {
+                        console.error('Remove favorite failed:', err);
+                        alert('오류가 발생했습니다.');
+                    }
+                }
+            });
+        });
+    </script>
+{% endblock %}

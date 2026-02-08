@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}대시보드 - Rent Radar{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="tabs">
+        <a href="/web/" class="tab {% if request.url.path == '/web/' or request.url.path == '/' %}active{% endif %}">요약</a>
+        <a href="/web/listings" class="tab {% if request.url.path == '/web/listings' %}active{% endif %}">매물 목록</a>
+        <a href="/web/favorites" class="tab {% if request.url.path == '/web/favorites' %}active{% endif %}">관심 매물</a>
+        <a href="/web/price-changes" class="tab {% if request.url.path == '/web/price-changes' %}active{% endif %}">가격 변동</a>
+    </div>
+
+    <div class="content">
+        {% block tab_content %}
+
+        <div class="filter-section">
+            <form action="/web/" method="get" class="filters">
+                <div>
+                    <label>지역:</label>
+                    <select name="region_code">
+                        <option value="">전체</option>
+                        {% for sido, districts in sido_sigungu.items() %}
+                            <optgroup label="{{ sido }}">
+                                {% for code, name in districts %}
+                                    <option value="{{ code }}" {% if filters.region_code == code %}selected{% endif %}>
+                                        {{ name }}
+                                    </option>
+                                {% endfor %}
+                            </optgroup>
+                        {% endfor %}
+                        </select>
+                </div>
+                <div>
+                    <label>동:</label>
+                    <input type="text" name="dong" value="{{ filters.dong }}" placeholder="예: 사직동">
+                </div>
+                <div>
+                    <label>매물유형:</label>
+                    <select name="property_type">
+                        <option value="">전체</option>
+                        <option value="apt" {% if filters.property_type == 'apt' %}selected{% endif %}>아파트</option>
+                        <option value="villa" {% if filters.property_type == 'villa' %}selected{% endif %}>연립다세대</option>
+                        <option value="officetel" {% if filters.property_type == 'officetel' %}selected{% endif %}>오피스텔</option>
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const currentPath = window.location.pathname;
+
+            const tabLinks = document.querySelectorAll('.tabs a');
+            tabLinks.forEach(link => {
+                if (currentPath === link.getAttribute('href')) {
+                    link.classList.add('active');
+                }
+            });
+
+            const form = document.querySelector('.filters');
+            if (form && currentPath === '/web/') {
+                const regionSelect = form.querySelector('select[name="region_code"]');
+                const propertyTypeSelect = form.querySelector('select[name="property_type"]');
+                const dongInput = form.querySelector('input[name="dong"]');
+
+                if (regionSelect && dongInput) {
+                    regionSelect.addEventListener('change', function() {
+                        const selectedCode = this.value;
+                        dongInput.placeholder = this.options[this.selectedIndex]?.text || '예: 사직동';
+                    });
+                }
+
+                if (propertyTypeSelect) {
+                    propertyTypeSelect.addEventListener('change', function() {
+                        this.value === 'villa' ? '연립다세대' : '아파트';
+                    });
+                }
+            }
+
+            // Auto-submit on filter change
+            const filterInputs = form.querySelectorAll('input, select');
+            filterInputs.forEach(input => {
+                input.addEventListener('change', function() {
+                    form.submit();
+                });
+            });
+        });
+    </script>
+{% endblock %}
+{% endblock %}

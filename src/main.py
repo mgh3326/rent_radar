@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from src.taskiq_app.broker import broker
+from src.web import router
 
 
 @asynccontextmanager
@@ -19,6 +20,8 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="rent-radar", lifespan=lifespan)
+
+app.include_router(router)
 
 
 @app.get("/health")

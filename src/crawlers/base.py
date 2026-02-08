@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 
 T = TypeVar("T")
@@ -14,3 +14,4 @@ class CrawlResult(Generic[T]):
 
     count: int
     rows: list[T]
+    errors: list[str] = field(default_factory=list)
