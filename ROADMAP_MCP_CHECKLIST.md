@@ -27,10 +27,13 @@ Last Updated: 2026-02-15
 - [x] Update README operation guide for allowlist
   - Evidence: `/Users/robin/PycharmProjects/rent_radar/README.md` includes `MCP_ENABLED_TOOLS` default/partial/fail-fast behavior.
 
-## Stage 4 (Pending) - Naver single e2e
-- [ ] Add `e2e_naver_mcp_check.py`
-- [ ] Add source-only cleanup + seed validation
-- [ ] Validate `--mcp-limit 3` and `--mcp-limit 1` cases
+## Stage 4 (Completed) - Naver single e2e
+- [x] Add `e2e_naver_mcp_check.py`
+  - Evidence: `/Users/robin/PycharmProjects/rent_radar/scripts/e2e_naver_mcp_check.py` added.
+- [x] Add source-only cleanup + seed validation
+  - Evidence: `uv run python /Users/robin/PycharmProjects/rent_radar/scripts/e2e_naver_mcp_check.py --cleanup-scope source_only --mcp-limit 3 | jq -r '.status, .cleanup.remaining_source_count, .upsert_count, .mcp.expected_count'` -> `success`, `0`, `3`, `3`
+- [x] Validate `--mcp-limit 3` and `--mcp-limit 1` cases
+  - Evidence: `uv run python /Users/robin/PycharmProjects/rent_radar/scripts/e2e_naver_mcp_check.py --cleanup-scope source_only --mcp-limit 3 | jq -r '.status, .mcp.expected_count'` -> `success`, `3`; `uv run python /Users/robin/PycharmProjects/rent_radar/scripts/e2e_naver_mcp_check.py --cleanup-scope source_only --mcp-limit 1 | jq -r '.status, .mcp.expected_count, .mcp.first_call.count, .mcp.second_call.count'` -> `success`, `1`, `1`, `1`
 
 ## Stage 5 (Pending) - MCP Tool Coverage
 - [ ] Add contract tests for region/favorite/compare tools
@@ -52,3 +55,6 @@ Last Updated: 2026-02-15
 | 2026-02-15 | Stage 2 baseline verification | `test_mcp_search_rent.py: 6 passed`, `e2e_mcp_search_rent_check.py: status=success` |
 | 2026-02-15 | Stage 3 MCP allowlist | `test_mcp_allowlist.py: 5 passed`, `test_mcp_search_rent.py: 6 passed`, docs/env/checklist updated |
 | 2026-02-15 | Stage 3 final verification refresh | `uv run pytest tests/test_mcp_allowlist.py -q: 7 passed`, `uv run pytest tests/test_mcp_search_rent.py -q: 6 passed`, `uv run ruff check ...: All checks passed` |
+| 2026-02-15 | Stage 4 Naver single e2e (`--mcp-limit 3`) | `uv run python /Users/robin/PycharmProjects/rent_radar/scripts/e2e_naver_mcp_check.py --cleanup-scope source_only --mcp-limit 3 \| jq -r '.status, .cleanup.remaining_source_count, .upsert_count, .mcp.expected_count': success/0/3/3` |
+| 2026-02-15 | Stage 4 Naver single e2e (`--mcp-limit 1`) | `uv run python /Users/robin/PycharmProjects/rent_radar/scripts/e2e_naver_mcp_check.py --cleanup-scope source_only --mcp-limit 1 \| jq -r '.status, .mcp.expected_count, .mcp.first_call.count, .mcp.second_call.count': success/1/1/1` |
+| 2026-02-15 | Stage 4 Naver script regression tests | `uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_e2e_naver_mcp_check.py -q: 6 passed` |
