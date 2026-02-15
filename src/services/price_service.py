@@ -2,7 +2,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.repositories import fetch_price_trend, fetch_real_prices
+from src.db.repositories import count_real_prices, fetch_price_trend, fetch_real_prices
 
 
 class PriceService:
@@ -18,6 +18,7 @@ class PriceService:
         dong: str | None,
         property_type: str,
         period_months: int,
+        limit: int = 50,
     ) -> list[dict[str, object]]:
         """Return real trade history rows."""
 
@@ -27,6 +28,7 @@ class PriceService:
             dong=dong,
             property_type=property_type,
             period_months=period_months,
+            limit=limit,
         )
         return [
             {
@@ -46,6 +48,50 @@ class PriceService:
             }
             for row in rows
         ]
+
+    async def get_real_price_with_total_count(
+        self,
+        *,
+        region_code: str | None,
+        dong: str | None,
+        property_type: str,
+        period_months: int,
+        limit: int = 50,
+    ) -> tuple[list[dict[str, object]], int]:
+        rows = await self.get_real_price(
+            region_code=region_code,
+            dong=dong,
+            property_type=property_type,
+            period_months=period_months,
+            limit=limit,
+        )
+        returned_count = len(rows)
+        if returned_count < limit:
+            return rows, returned_count
+
+        total_count = await self.get_real_price_total_count(
+            region_code=region_code,
+            dong=dong,
+            property_type=property_type,
+            period_months=period_months,
+        )
+        return rows, total_count
+
+    async def get_real_price_total_count(
+        self,
+        *,
+        region_code: str | None,
+        dong: str | None,
+        property_type: str,
+        period_months: int,
+    ) -> int:
+        return await count_real_prices(
+            self._session,
+            region_code=region_code,
+            dong=dong,
+            property_type=property_type,
+            period_months=period_months,
+        )
 
     async def get_price_trend(
         self,

@@ -4,7 +4,7 @@ This module provides the mapping of 5-digit LAWD_CD codes to Si/Gun/Gu names
 across all 17 special cities, metropolitan cities, and provinces in South Korea.
 """
 
-from typing import Literal
+from typing import Literal, TypedDict
 
 # Type alias for valid region codes
 RegionCode = Literal[
@@ -702,6 +702,46 @@ def is_valid_region_code(region_code: str) -> bool:
     return region_code in REGION_CODE_TO_NAME
 
 
+class RegionCodeParts(TypedDict):
+    """Normalized region-code metadata for query filtering."""
+
+    sido: str
+    sigungu: str
+    aliases: list[str]
+
+
+def region_code_to_parts(region_code: str) -> RegionCodeParts | None:
+    """Convert a region code into canonical sido/sigungu/alias parts."""
+    full_name = REGION_CODE_TO_NAME.get(region_code)
+    if not full_name:
+        return None
+
+    parts = full_name.split(maxsplit=1)
+    if len(parts) != 2:
+        return None
+
+    sido_name, sigungu_name = parts
+    aliases = [sigungu_name]
+
+    if "시" in sigungu_name:
+        short_name = sigungu_name.rsplit("시", maxsplit=1)[-1]
+        if short_name and short_name != sigungu_name:
+            aliases.append(short_name)
+
+    return {
+        "sido": sido_name,
+        "sigungu": sigungu_name,
+        "aliases": aliases,
+    }
+
+
+def region_code_to_sigungu_names(region_code: str) -> list[str]:
+    parts = region_code_to_parts(region_code)
+    if not parts:
+        return []
+    return list(parts["aliases"])
+
+
 def region_codes_to_district_names(codes: list[str]) -> list[str]:
     """Convert region codes to district names.
 
@@ -717,9 +757,7 @@ def region_codes_to_district_names(codes: list[str]) -> list[str]:
     """
     district_names = []
     for code in codes:
-        full_name = REGION_CODE_TO_NAME.get(code)
-        if full_name:
-            # Extract district name from "서울특별시 종로구" -> "종로구"
-            district_name = full_name.split()[-1]
-            district_names.append(district_name)
+        names = region_code_to_sigungu_names(code)
+        if names:
+            district_names.append(names[0])
     return district_names

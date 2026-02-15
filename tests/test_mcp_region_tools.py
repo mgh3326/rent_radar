@@ -85,6 +85,24 @@ async def test_list_regions_detailed_format_contains_full_name(
 
 
 @pytest.mark.anyio
+async def test_list_regions_sigungu_partial_match_returns_expected_regions(
+    mcp_server: FastMCP,
+) -> None:
+    result = await mcp_server.call_tool(
+        "list_regions",
+        {"sido": "경기도", "sigungu": "분당구"},
+    )
+    payload = _extract_payload(result)
+    regions = _extract_regions(payload)
+
+    assert payload["count"] == len(regions)
+    assert len(regions) > 0
+    assert all(region.get("sido") == "경기도" for region in regions)
+    assert all("분당구" in str(region.get("sigungu", "")) for region in regions)
+    assert any(region.get("sigungu") == "성남시분당구" for region in regions)
+
+
+@pytest.mark.anyio
 async def test_search_regions_applies_limit_and_partial_match(
     mcp_server: FastMCP,
 ) -> None:

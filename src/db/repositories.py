@@ -7,10 +7,11 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import cast
 
-from sqlalchemy import delete, func, select, tuple_, update
+from sqlalchemy import and_, delete, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config.region_codes import region_code_to_parts
 from src.models.favorite import Favorite
 from src.models.listing import Listing
 from src.models.price_change import PriceChange
@@ -194,7 +195,7 @@ async def fetch_real_prices(
     dong: str | None,
     property_type: str,
     period_months: int,
-    limit: int = 200,
+    limit: int = 50,
 ) -> list[RealTrade]:
     """Fetch real trade records for MCP tool responses."""
 
@@ -218,6 +219,30 @@ async def fetch_real_prices(
 
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def count_real_prices(
+    session: AsyncSession,
+    *,
+    region_code: str | None,
+    dong: str | None,
+    property_type: str,
+    period_months: int,
+) -> int:
+    ym_expr = (RealTrade.contract_year * 100) + RealTrade.contract_month
+    stmt = (
+        select(func.count(RealTrade.id))
+        .where(RealTrade.property_type == property_type)
+        .where(ym_expr >= _start_ym(period_months))
+    )
+
+    if region_code:
+        stmt = stmt.where(RealTrade.region_code == region_code)
+    if dong:
+        stmt = stmt.where(RealTrade.dong.ilike(f"%{dong}%"))
+
+    count = (await session.execute(stmt)).scalar_one_or_none()
+    return int(count or 0)
 
 
 @dataclass(slots=True)
@@ -423,7 +448,6 @@ async def fetch_sale_trades(
 ) -> list[RealTrade]:
     """Fetch sale trade records by filters."""
 
-    ym_expr = (RealTrade.contract_year * 100) + RealTrade.contract_month
     stmt = (
         select(RealTrade)
         .where(RealTrade.trade_category == trade_category)
@@ -631,7 +655,22 @@ async def fetch_listings(
         stmt = stmt.where(Listing.is_active == is_active)
 
     if region_code:
-        stmt = stmt.where(Listing.address.ilike(f"%{region_code}%"))
+        parts = region_code_to_parts(region_code)
+        if not parts:
+            return []
+
+        sido_name = parts["sido"]
+        sigungu_name = parts["sigungu"]
+        sigungu_aliases = parts["aliases"]
+        stmt = stmt.where(
+            and_(
+                Listing.address.ilike(f"%{sido_name}%"),
+                or_(
+                    Listing.address.ilike(f"%{sigungu_name}%"),
+                    Listing.dong.in_(sigungu_aliases),
+                ),
+            )
+        )
 
     if dong:
         stmt = stmt.where(Listing.dong.ilike(f"%{dong}%"))
@@ -709,7 +748,7 @@ async def deactivate_stale_listings(
     stmt = (
         update(Listing)
         .where(Listing.source == source)
-        .where(Listing.is_active == True)
+        .where(Listing.is_active.is_(True))
         .where(Listing.last_seen_at < threshold_time)
         .values(is_active=False)
         .returning(Listing.id)
@@ -1048,7 +1087,7 @@ async def fetch_data_quality_issues(
                     (Listing.deposit <= 0)
                     | (Listing.monthly_rent < 0)
                     | (
-                        (Listing.is_active == True)
+                        (Listing.is_active.is_(True))
                         & (Listing.last_seen_at < stale_threshold)
                     )
                 )

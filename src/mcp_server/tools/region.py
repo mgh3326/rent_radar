@@ -25,13 +25,14 @@ def register_region_tools(mcp: FastMCP) -> None:
             Region list with codes and names matching the filters.
         """
 
+        sigungu_filter = sigungu.strip() if sigungu else None
         regions = []
         for sido_name, sigungu_list in SIDO_SIGUNGU.items():
             if sido and sido_name != sido:
                 continue
 
             for code, sigungu_name in sigungu_list:
-                if sigungu and sigungu_name != sigungu:
+                if sigungu_filter and sigungu_filter not in sigungu_name:
                     continue
 
                 if format == "compact":

@@ -78,13 +78,25 @@ docker compose up -d
 Claude Desktop 또는 MCP 클라이언트에서 사용 가능:
 
 **Available Tools:**
-- `search_rent` - 임대 매물 검색 (캐시 적용)
-- `get_real_price` - 실거래가 조회
+- `search_rent` - 임대 매물 검색 (`listings` 기반, 캐시 적용, 0건 시 데이터 소스 안내 메시지 포함)
+- `get_real_price` - 실거래가 조회 (`real_trades` 기반, `limit` 기본 50 / 최대 200, `total_count`/`returned_count`/`has_more` 포함)
 - `get_price_trend` - 가격 추이
 - `check_jeonse_safety` - 전세 안전성 진단
 - `compare_listings` - 매물 비교
 - `add_favorite`, `remove_favorite`, `list_favorites`, `manage_favorites` - 관심매물 관리
 - `list_regions`, `search_regions` - 지역 정보
+
+**`get_real_price` 응답 메타 예시:**
+
+```json
+{
+  "count": 20,
+  "returned_count": 20,
+  "total_count": 1372,
+  "has_more": true,
+  "items": []
+}
+```
 
 **Tool Allowlist (`MCP_ENABLED_TOOLS`):**
 - 미설정/빈 값: 전체 tool 활성 (기본 동작)
@@ -181,6 +193,8 @@ uv run python /Users/robin/PycharmProjects/rent_radar/scripts/e2e_mcp_search_ren
 uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_search_rent.py -q
 ```
 
+- Shell safety: 명령어 실행 시 `>` 리다이렉션으로 전체 명령 문자열이 파일명으로 저장되지 않도록 주의하세요.
+
 ### Success criteria
 
 - First `search_rent` call: `cache_hit=false`
@@ -231,6 +245,25 @@ MCP_ENABLED_TOOLS=search_rent uv run python /Users/robin/PycharmProjects/rent_ra
 - Error contracts are fixed by tests: `listing not found`, compare `1`/`11`, `manage_favorites(action="invalid")`
 - Missing required Stage 4 tools causes immediate preflight failure before DB operations (fail-fast, deterministic env contract)
 - `compare_listings` market fields (`market_avg_deposit`, `market_sample_count`) may be `None`/`0` and are treated as valid in Stage 4
+
+## 수동 시드 기반 MCP 지역검증
+
+- 목적: 워커/스케줄러를 돌리지 않고 `list_regions` / `search_rent(region_code=...)` 지역 필터 동작을 재현 검증
+- 기준 지역코드:
+  - `11110`: 서울특별시 종로구
+  - `11680`: 서울특별시 강남구
+  - `41135`: 경기도 성남시분당구
+- 캐시 주의사항: `search_rent`는 Redis 캐시(TTL 기본 1800초)를 사용하므로, 빈 결과가 캐시되면 수동 검증 시 false negative가 발생할 수 있음
+
+### Run (seed -> check)
+
+```bash
+uv run python /Users/robin/PycharmProjects/rent_radar/scripts/manual_seed_mcp_region_test_data.py --cleanup-source-only --clear-cache
+uv run python /Users/robin/PycharmProjects/rent_radar/scripts/manual_mcp_region_checks.py --limit 20
+```
+
+- `manual_seed_mcp_region_test_data.py`는 `source=manual_test_seed` 데이터만 정리/재시드하고, 검증에 사용하는 `region_code + property_type=apt` 캐시 키를 함께 삭제
+- `11680`은 Naver 형태(`dong=역삼동`, `address`에 `강남구`) 시드를 포함하여 하이브리드 지역필터를 검증
 
 ## Architecture
 

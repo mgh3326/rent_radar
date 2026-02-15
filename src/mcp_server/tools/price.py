@@ -15,6 +15,7 @@ def register_price_tools(mcp: FastMCP) -> None:
         dong: str | None = None,
         property_type: str = "apt",
         period_months: int = 6,
+        limit: int = 50,
     ) -> dict[str, object]:
         """Return rent real-trade history for a region/dong.
 
@@ -23,27 +24,39 @@ def register_price_tools(mcp: FastMCP) -> None:
             dong: Legal dong name (optional, filters by dong name)
             property_type: Property type - "apt" (아파트), "villa" (연립다세대), "officetel" (오피스텔)
             period_months: Number of months to look back (default: 6)
+            limit: Maximum rows to return (default: 50, max: 200)
         """
 
         if period_months <= 0:
             raise ValueError("period_months must be greater than 0")
+        if limit <= 0:
+            raise ValueError("limit must be greater than 0")
+        if limit > 200:
+            raise ValueError("limit must be less than or equal to 200")
 
         async with session_context() as session:
             service = PriceService(session)
-            rows = await service.get_real_price(
+            rows, total_count = await service.get_real_price_with_total_count(
                 region_code=region_code,
                 dong=dong,
                 property_type=property_type,
                 period_months=period_months,
+                limit=limit,
             )
+
+        returned_count = len(rows)
         return {
             "query": {
                 "region_code": region_code,
                 "dong": dong,
                 "property_type": property_type,
                 "period_months": period_months,
+                "limit": limit,
             },
-            "count": len(rows),
+            "count": returned_count,
+            "returned_count": returned_count,
+            "total_count": total_count,
+            "has_more": total_count > returned_count,
             "items": rows,
         }
 

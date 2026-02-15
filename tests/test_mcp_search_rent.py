@@ -238,6 +238,53 @@ async def test_search_rent_allows_empty_result_without_error(
     assert payload["count"] == 0
     assert payload["items"] == []
     assert payload["cache_hit"] is False
+    assert payload["message"] == listing_tools.EMPTY_RESULTS_MESSAGE
+
+
+@pytest.mark.anyio
+async def test_search_rent_cache_hit_empty_result_adds_data_source_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cached_payload = {
+        "query": {"dong": "MCP_TEST", "limit": 3},
+        "count": 0,
+        "items": [],
+        "cache_hit": False,
+    }
+
+    async def fake_cache_get(_key: str) -> str:
+        return json.dumps(cached_payload, ensure_ascii=False)
+
+    async def fake_cache_set(_key: str, _value: Any, _ttl_seconds: int) -> None:
+        return None
+
+    @asynccontextmanager
+    async def forbidden_session_context():
+        raise AssertionError("session_context must not be called on cache hit")
+        yield object()  # pragma: no cover
+
+    async def forbidden_search_listings(
+        self: Any,
+        **kwargs: Any,  # noqa: ARG001
+    ) -> list[dict[str, object]]:
+        raise AssertionError("search_listings must not be called on cache hit")
+
+    monkeypatch.setattr(listing_tools, "cache_get", fake_cache_get)
+    monkeypatch.setattr(listing_tools, "cache_set", fake_cache_set)
+    monkeypatch.setattr(listing_tools, "session_context", forbidden_session_context)
+    monkeypatch.setattr(
+        listing_tools.ListingService,
+        "search_listings",
+        forbidden_search_listings,
+    )
+
+    result = await mcp.call_tool("search_rent", {"dong": "MCP_TEST", "limit": 3})
+    payload = _extract_payload(result)
+
+    assert payload["count"] == 0
+    assert payload["items"] == []
+    assert payload["cache_hit"] is True
+    assert payload["message"] == listing_tools.EMPTY_RESULTS_MESSAGE
 
 
 @pytest.mark.anyio
@@ -256,8 +303,18 @@ async def test_search_rent_count_matches_items_length_on_cache_miss(
 
     async def fake_search_listings(self: Any, **kwargs: Any) -> list[dict[str, object]]:  # noqa: ARG001
         return [
-            {"id": 1, "source": "zigbang_test_seed", "source_id": "m1", "dong": "MCP_TEST"},
-            {"id": 2, "source": "zigbang_test_seed", "source_id": "m2", "dong": "MCP_TEST"},
+            {
+                "id": 1,
+                "source": "zigbang_test_seed",
+                "source_id": "m1",
+                "dong": "MCP_TEST",
+            },
+            {
+                "id": 2,
+                "source": "zigbang_test_seed",
+                "source_id": "m2",
+                "dong": "MCP_TEST",
+            },
         ]
 
     monkeypatch.setattr(listing_tools, "cache_get", fake_cache_get)
@@ -293,10 +350,25 @@ async def test_search_rent_limit_one_returns_at_most_one_item(
 
     async def fake_search_listings(self: Any, **kwargs: Any) -> list[dict[str, object]]:  # noqa: ARG001
         limit = int(kwargs.get("limit", 50))
-        seed = [
-            {"id": 11, "source": "zigbang_test_seed", "source_id": "l1", "dong": "MCP_TEST"},
-            {"id": 12, "source": "zigbang_test_seed", "source_id": "l2", "dong": "MCP_TEST"},
-            {"id": 13, "source": "zigbang_test_seed", "source_id": "l3", "dong": "MCP_TEST"},
+        seed: list[dict[str, object]] = [
+            {
+                "id": 11,
+                "source": "zigbang_test_seed",
+                "source_id": "l1",
+                "dong": "MCP_TEST",
+            },
+            {
+                "id": 12,
+                "source": "zigbang_test_seed",
+                "source_id": "l2",
+                "dong": "MCP_TEST",
+            },
+            {
+                "id": 13,
+                "source": "zigbang_test_seed",
+                "source_id": "l3",
+                "dong": "MCP_TEST",
+            },
         ]
         return seed[:limit]
 

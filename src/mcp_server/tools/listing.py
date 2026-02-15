@@ -2,6 +2,7 @@
 
 import json
 from decimal import Decimal
+from typing import cast
 
 from mcp.server.fastmcp import FastMCP
 
@@ -11,6 +12,9 @@ from src.db.session import session_context
 from src.services.listing_service import ListingService
 
 settings = get_settings()
+EMPTY_RESULTS_MESSAGE = (
+    "활성 매물은 listings 데이터 기준이며, 실거래 데이터(real_trades)와는 별개입니다."
+)
 
 
 def register_listing_tools(mcp: FastMCP) -> None:
@@ -51,7 +55,9 @@ def register_listing_tools(mcp: FastMCP) -> None:
 
         cached = await cache_get(cache_key)
         if cached:
-            result = json.loads(cached)
+            result = cast(dict[str, object], json.loads(cached))
+            if result.get("count") == 0 and "message" not in result:
+                result["message"] = EMPTY_RESULTS_MESSAGE
             result["cache_hit"] = True
             return result
 
@@ -74,7 +80,7 @@ def register_listing_tools(mcp: FastMCP) -> None:
                 limit=limit,
             )
 
-        result = {
+        result: dict[str, object] = {
             "query": {
                 "region_code": region_code,
                 "dong": dong,
@@ -94,6 +100,8 @@ def register_listing_tools(mcp: FastMCP) -> None:
             "items": results,
             "cache_hit": False,
         }
+        if result["count"] == 0:
+            result["message"] = EMPTY_RESULTS_MESSAGE
 
         await cache_set(cache_key, result, settings.listing_cache_ttl_seconds)
         return result
