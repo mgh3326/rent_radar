@@ -43,6 +43,7 @@ cp .env.example .env
 - `PUBLIC_DATA_API_KEY`: 공공데이터포털 API Key (필수, 없으면 mock 데이터 사용)
 - `TARGET_REGION_CODES`: 대상 지역 코드 (기본: 11110 - 종로구)
 - `TARGET_PROPERTY_TYPES`: 매물 유형 (apt, villa, officetel)
+- `MCP_ENABLED_TOOLS`: MCP tool allowlist (콤마 구분, 미설정/빈 값이면 전체 tool 활성)
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`: 텔레그램 알림용
 
 4. Database migration
@@ -82,9 +83,13 @@ Claude Desktop 또는 MCP 클라이언트에서 사용 가능:
 - `get_price_trend` - 가격 추이
 - `check_jeonse_safety` - 전세 안전성 진단
 - `compare_listings` - 매물 비교
-- `get_price_trend` - 지역별 가격 추이
-- `manage_favorites` - 관심매물 관리
+- `add_favorite`, `remove_favorite`, `list_favorites`, `manage_favorites` - 관심매물 관리
 - `list_regions`, `search_regions` - 지역 정보
+
+**Tool Allowlist (`MCP_ENABLED_TOOLS`):**
+- 미설정/빈 값: 전체 tool 활성 (기본 동작)
+- 일부만 허용: `MCP_ENABLED_TOOLS=search_rent,list_regions`
+- 오타/미지원 이름 포함: 서버 시작 시 `ValueError`로 fail-fast
 
 **Claude Desktop 설정:**
 ```json
@@ -167,6 +172,7 @@ uv run python scripts/e2e_zigbang_mcp_check.py --reset-scope full --confirm-rese
 
 - Goal: verify `search_rent` tool behavior without crawler/worker dependencies.
 - Cleanup policy: delete only seed-source data (`source='zigbang_test_seed'`), not full tables.
+- Roadmap checklist: `/Users/robin/PycharmProjects/rent_radar/ROADMAP_MCP_CHECKLIST.md`
 
 ### Run
 
