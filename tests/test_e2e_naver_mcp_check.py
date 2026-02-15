@@ -73,6 +73,7 @@ def _patch_run_dependencies(
     expected_seed_source: str,
     upsert_count: int,
     observed_seed_row_count: int,
+    expected_seed_rows_len: int = 3,
     payload_builder: Callable[[int, dict[str, object]], dict[str, object]],
 ) -> None:
     @asynccontextmanager
@@ -95,7 +96,7 @@ def _patch_run_dependencies(
         _session: object,
         seed_rows: list[object],
     ) -> int:
-        assert len(seed_rows) == 3
+        assert len(seed_rows) == expected_seed_rows_len
         return upsert_count
 
     async def fake_count_seed_rows(
@@ -233,6 +234,94 @@ async def test_run_fails_on_partial_upsert(monkeypatch: pytest.MonkeyPatch) -> N
     failures = report.get("failures")
     assert isinstance(failures, list)
     assert "upsert_count != seed_row_count" in failures
+
+
+@pytest.mark.anyio
+async def test_run_fails_on_seed_validation_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _make_args(3)
+
+    def payload_builder(
+        call_number: int, query: dict[str, object]
+    ) -> dict[str, object]:
+        limit, dong = _extract_limit_and_dong(query)
+        items = _build_items(source=args.seed_source, dong=dong, limit=limit)
+        return {
+            "count": len(items),
+            "items": items,
+            "cache_hit": call_number == 2,
+        }
+
+    _patch_run_dependencies(
+        monkeypatch,
+        expected_seed_source=args.seed_source,
+        upsert_count=3,
+        observed_seed_row_count=2,
+        payload_builder=payload_builder,
+    )
+
+    report = await _run_script(args)
+
+    assert report["status"] == "failure"
+    failures = report.get("failures")
+    assert isinstance(failures, list)
+    assert "seed_validation_count_mismatch" in failures
+    seed_validation = _require_dict(report["seed_validation"])
+    assert seed_validation["observed"] == 2
+    assert seed_validation["expected"] == 3
+    assert seed_validation["ok"] is False
+
+
+@pytest.mark.anyio
+async def test_run_expected_count_tracks_seed_row_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _make_args(3)
+    original_build_seed_rows = naver_check._build_seed_rows
+
+    def fake_build_seed_rows(
+        seed_source: str, seed_dong: str, run_id: str
+    ) -> list[object]:
+        return cast(
+            list[object],
+            original_build_seed_rows(seed_source, seed_dong, run_id)[:2],
+        )
+
+    def payload_builder(
+        call_number: int, query: dict[str, object]
+    ) -> dict[str, object]:
+        limit, dong = _extract_limit_and_dong(query)
+        items = _build_items(source=args.seed_source, dong=dong, limit=limit)[:2]
+        return {
+            "count": len(items),
+            "items": items,
+            "cache_hit": call_number == 2,
+        }
+
+    monkeypatch.setattr(
+        "scripts.e2e_naver_mcp_check._build_seed_rows",
+        fake_build_seed_rows,
+    )
+    _patch_run_dependencies(
+        monkeypatch,
+        expected_seed_source=args.seed_source,
+        upsert_count=2,
+        observed_seed_row_count=2,
+        expected_seed_rows_len=2,
+        payload_builder=payload_builder,
+    )
+
+    report = await _run_script(args)
+
+    assert report["status"] == "success"
+    assert report["seed_row_count"] == 2
+    mcp = _require_dict(report["mcp"])
+    assert mcp["expected_count"] == 2
+    first_call = _require_dict(mcp["first_call"])
+    second_call = _require_dict(mcp["second_call"])
+    assert first_call["count"] == 2
+    assert second_call["count"] == 2
 
 
 @pytest.mark.anyio
