@@ -98,10 +98,12 @@ async def test_search_rent_cache_miss_uses_service_and_sets_cache(
 
     result = await mcp.call_tool("search_rent", {"dong": "MCP_TEST", "limit": 2})
     payload = _extract_payload(result)
+    items = _extract_items(payload)
 
     assert payload["cache_hit"] is False
     assert payload["count"] == len(sample_items)
     assert payload["items"] == sample_items
+    assert payload["count"] == len(items)
     assert search_kwargs["dong"] == "MCP_TEST"
     assert search_kwargs["limit"] == 2
     assert len(cache_set_calls) == 1
@@ -153,10 +155,13 @@ async def test_search_rent_cache_hit_skips_session_and_service(
 
     result = await mcp.call_tool("search_rent", {"dong": "MCP_TEST", "limit": 1})
     payload = _extract_payload(result)
+    items = _extract_items(payload)
 
     assert payload["count"] == 1
     assert payload["cache_hit"] is True
-    assert _extract_items(payload)[0]["source_id"] == "cached-7"
+    assert payload["count"] == len(items)
+    assert _extract_query(payload)["limit"] == 1
+    assert items[0]["source_id"] == "cached-7"
 
 
 @pytest.mark.anyio
@@ -233,3 +238,81 @@ async def test_search_rent_allows_empty_result_without_error(
     assert payload["count"] == 0
     assert payload["items"] == []
     assert payload["cache_hit"] is False
+
+
+@pytest.mark.anyio
+async def test_search_rent_count_matches_items_length_on_cache_miss(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_cache_get(_key: str) -> None:
+        return None
+
+    async def fake_cache_set(_key: str, _value: Any, _ttl_seconds: int) -> None:
+        return None
+
+    @asynccontextmanager
+    async def fake_session_context():
+        yield object()
+
+    async def fake_search_listings(self: Any, **kwargs: Any) -> list[dict[str, object]]:  # noqa: ARG001
+        return [
+            {"id": 1, "source": "zigbang_test_seed", "source_id": "m1", "dong": "MCP_TEST"},
+            {"id": 2, "source": "zigbang_test_seed", "source_id": "m2", "dong": "MCP_TEST"},
+        ]
+
+    monkeypatch.setattr(listing_tools, "cache_get", fake_cache_get)
+    monkeypatch.setattr(listing_tools, "cache_set", fake_cache_set)
+    monkeypatch.setattr(listing_tools, "session_context", fake_session_context)
+    monkeypatch.setattr(
+        listing_tools.ListingService,
+        "search_listings",
+        fake_search_listings,
+    )
+
+    result = await mcp.call_tool("search_rent", {"dong": "MCP_TEST", "limit": 2})
+    payload = _extract_payload(result)
+    items = _extract_items(payload)
+
+    assert payload["cache_hit"] is False
+    assert payload["count"] == len(items)
+
+
+@pytest.mark.anyio
+async def test_search_rent_limit_one_returns_at_most_one_item(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_cache_get(_key: str) -> None:
+        return None
+
+    async def fake_cache_set(_key: str, _value: Any, _ttl_seconds: int) -> None:
+        return None
+
+    @asynccontextmanager
+    async def fake_session_context():
+        yield object()
+
+    async def fake_search_listings(self: Any, **kwargs: Any) -> list[dict[str, object]]:  # noqa: ARG001
+        limit = int(kwargs.get("limit", 50))
+        seed = [
+            {"id": 11, "source": "zigbang_test_seed", "source_id": "l1", "dong": "MCP_TEST"},
+            {"id": 12, "source": "zigbang_test_seed", "source_id": "l2", "dong": "MCP_TEST"},
+            {"id": 13, "source": "zigbang_test_seed", "source_id": "l3", "dong": "MCP_TEST"},
+        ]
+        return seed[:limit]
+
+    monkeypatch.setattr(listing_tools, "cache_get", fake_cache_get)
+    monkeypatch.setattr(listing_tools, "cache_set", fake_cache_set)
+    monkeypatch.setattr(listing_tools, "session_context", fake_session_context)
+    monkeypatch.setattr(
+        listing_tools.ListingService,
+        "search_listings",
+        fake_search_listings,
+    )
+
+    result = await mcp.call_tool("search_rent", {"dong": "MCP_TEST", "limit": 1})
+    payload = _extract_payload(result)
+    items = _extract_items(payload)
+
+    assert _extract_query(payload)["limit"] == 1
+    assert len(items) <= 1
+    assert payload["count"] == len(items)

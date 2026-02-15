@@ -180,8 +180,12 @@ uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_search_rent
 - First `search_rent` call: `cache_hit=false`
 - Second call with same query: `cache_hit=true`
 - `count > 0`
-- Returned items have non-empty `source_id`
-- Returned item count does not exceed `limit`
+- `expected_count=min(3, limit)` and both calls match expected count
+- Both calls satisfy `count == len(items)`
+- Returned items (first/second call) have non-empty `source_id`
+- Returned items (first/second call) satisfy `dong == seed_dong`
+- Returned item count does not exceed `limit` in both calls
+- Note: script may leave seed rows at process end; next run starts with source-only cleanup.
 
 ## Architecture
 

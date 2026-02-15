@@ -12,7 +12,9 @@ from pydantic_settings.sources.providers.env import EnvSettingsSource
 VALID_PROPERTY_TYPES = ("apt", "villa", "officetel", "house")
 
 # Fields that accept comma-separated strings in .env
-_COMMA_LIST_FIELDS = frozenset({"target_property_types", "target_region_codes"})
+_COMMA_LIST_FIELDS = frozenset(
+    {"target_property_types", "target_region_codes", "mcp_enabled_tools"}
+)
 
 
 class _CommaListSourceMixin:
@@ -62,6 +64,7 @@ class Settings(BaseSettings):
     public_data_fetch_months: int = Field(default=2, ge=1, le=24)
     target_property_types: list[str] = Field(default_factory=lambda: ["apt"])
     target_region_codes: list[str] = Field(default_factory=lambda: ["11110"])
+    mcp_enabled_tools: list[str] = Field(default_factory=list)
 
     task_result_ttl_seconds: int = 3600
     crawl_dedup_ttl_seconds: int = 3600
@@ -112,6 +115,31 @@ class Settings(BaseSettings):
             parsed = [str(item).strip() for item in value if str(item).strip()]
             return parsed or ["11110"]
         raise ValueError("target_region_codes must be a comma-separated string or list")
+
+    @field_validator("mcp_enabled_tools", mode="before")
+    @classmethod
+    def _parse_mcp_enabled_tools(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            raw_items = value.split(",")
+        elif isinstance(value, list):
+            raw_items = [str(item) for item in value]
+        else:
+            raise ValueError(
+                "mcp_enabled_tools must be a comma-separated string or list"
+            )
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw_item in raw_items:
+            tool_name = raw_item.strip().lower()
+            if not tool_name or tool_name in seen:
+                continue
+            seen.add(tool_name)
+            normalized.append(tool_name)
+
+        return normalized
 
     @classmethod
     def settings_customise_sources(

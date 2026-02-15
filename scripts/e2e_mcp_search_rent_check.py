@@ -99,7 +99,12 @@ def _extract_mcp_payload(tool_result: object) -> dict[str, object]:
                 first = part[0]
                 maybe_text = getattr(first, "text", None)
                 if isinstance(maybe_text, str):
-                    loaded = json.loads(maybe_text)
+                    try:
+                        loaded = json.loads(maybe_text)
+                    except json.JSONDecodeError as exc:
+                        raise RuntimeError(
+                            f"Failed to parse MCP text payload as JSON: {exc}"
+                        ) from exc
                     if isinstance(loaded, dict):
                         return _normalize_payload(loaded)
     raise RuntimeError("Failed to extract structured MCP payload from call result")
@@ -220,8 +225,10 @@ async def _cleanup_seed_source(
             delete(PriceChange).where(PriceChange.listing_id.in_(listing_ids))
         )
 
-    _ = await session.execute(delete(Listing).where(Listing.source == seed_source))
-    listings_deleted = len(listing_ids)
+    listings_deleted_result = await session.execute(
+        delete(Listing).where(Listing.source == seed_source)
+    )
+    listings_deleted = int(listings_deleted_result.rowcount or 0)
     await session.commit()
 
     remaining_source_count = (
@@ -277,9 +284,25 @@ async def _run(args: CliArgs) -> dict[str, object]:
     second_payload = _extract_mcp_payload(second_result)
 
     first_items = _extract_items(first_payload)
+    second_items = _extract_items(second_payload)
 
     first_count = _extract_count(first_payload)
     second_count = _extract_count(second_payload)
+    expected_count = min(len(seed_rows), args.mcp_limit)
+    first_call_count_matches_items = first_count == len(first_items)
+    second_call_count_matches_items = second_count == len(second_items)
+    counts_match = first_count == second_count
+
+    first_call_items_quality_ok = (
+        len(first_items) <= args.mcp_limit
+        and all(str(item.get("source_id", "")).strip() != "" for item in first_items)
+        and all(item.get("dong") == seed_dong for item in first_items)
+    )
+    second_call_items_quality_ok = (
+        len(second_items) <= args.mcp_limit
+        and all(str(item.get("source_id", "")).strip() != "" for item in second_items)
+        and all(item.get("dong") == seed_dong for item in second_items)
+    )
 
     if first_payload.get("cache_hit") is not False:
         failures.append("first_call_cache_hit != False")
@@ -287,12 +310,18 @@ async def _run(args: CliArgs) -> dict[str, object]:
         failures.append("second_call_cache_hit != True")
     if first_count <= 0:
         failures.append("mcp_count <= 0")
-    if len(first_items) > args.mcp_limit:
-        failures.append("mcp_items_exceed_limit")
-    if any(str(item.get("source_id", "")).strip() == "" for item in first_items):
-        failures.append("mcp_items_contains_empty_source_id")
-    if any(item.get("dong") != seed_dong for item in first_items):
-        failures.append("mcp_items_contains_unexpected_dong")
+    if not first_call_count_matches_items:
+        failures.append("first_count != len(first_items)")
+    if not second_call_count_matches_items:
+        failures.append("second_count != len(second_items)")
+    if first_count != expected_count:
+        failures.append("first_count != expected_count")
+    if not counts_match:
+        failures.append("second_count != first_count")
+    if not first_call_items_quality_ok:
+        failures.append("first_call_items_quality_failed")
+    if not second_call_items_quality_ok:
+        failures.append("second_call_items_quality_failed")
 
     report: dict[str, object] = {
         "status": "success" if not failures else "failure",
@@ -305,9 +334,14 @@ async def _run(args: CliArgs) -> dict[str, object]:
         "mcp": {
             "tool": "search_rent",
             "query": query,
+            "expected_count": expected_count,
             "first_call": _summarize_call(first_payload),
             "second_call": _summarize_call(second_payload),
-            "counts_match": first_count == second_count,
+            "first_call_count_matches_items": first_call_count_matches_items,
+            "second_call_count_matches_items": second_call_count_matches_items,
+            "first_call_items_quality_ok": first_call_items_quality_ok,
+            "second_call_items_quality_ok": second_call_items_quality_ok,
+            "counts_match": counts_match,
         },
     }
     if failures:
