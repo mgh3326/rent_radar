@@ -193,6 +193,45 @@ uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_search_rent
 - Returned item count does not exceed `limit` in both calls
 - Note: script may leave seed rows at process end; next run starts with source-only cleanup.
 
+## Zigbang-Only MCP Tool Suite Verification (Stage 4)
+
+- Goal: validate `search_rent -> add/list favorites -> compare_listings` with Zigbang seed rows and fixed error contracts.
+- Recommended runtime allowlist:
+
+```bash
+MCP_ENABLED_TOOLS=search_rent,list_regions,search_regions,add_favorite,list_favorites,remove_favorite,manage_favorites,compare_listings
+```
+
+- Preflight behavior: `scripts/e2e_zigbang_mcp_tool_suite.py` checks MCP tools required by this Stage 4 tool-suite script at startup via `mcp.list_tools()` and fails fast with `RuntimeError` (including recommended `MCP_ENABLED_TOOLS`) before cleanup/upsert if any required tool is missing.
+
+### Run
+
+```bash
+uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_region_tools.py -q
+uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_favorite_tools.py -q
+uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_compare_listings.py -q
+uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_e2e_zigbang_mcp_tool_suite.py -q
+uv run python /Users/robin/PycharmProjects/rent_radar/scripts/e2e_zigbang_mcp_tool_suite.py --cleanup-scope source_only --mcp-limit 3
+```
+
+### Preflight fail-fast check (repro)
+
+```bash
+MCP_ENABLED_TOOLS=search_rent uv run python /Users/robin/PycharmProjects/rent_radar/scripts/e2e_zigbang_mcp_tool_suite.py --cleanup-scope source_only --mcp-limit 3
+```
+
+- Expected: immediate `status=failure` with `Required Stage 4 MCP tools are missing before execution: ...`
+- Expected: failure happens before cleanup/upsert (no DB mutation from this run)
+
+### Success criteria
+
+- `search_rent` returns `count > 0`, `count == len(items)`, first call `cache_hit=false`, second call `cache_hit=true`
+- `add_favorite` succeeds for seeded listing and `list_favorites` satisfies `count == len(items)`
+- `compare_listings` succeeds for 2 listings and returns `status`, `listing_count`, `comparisons`, `summary`
+- Error contracts are fixed by tests: `listing not found`, compare `1`/`11`, `manage_favorites(action="invalid")`
+- Missing required Stage 4 tools causes immediate preflight failure before DB operations (fail-fast, deterministic env contract)
+- `compare_listings` market fields (`market_avg_deposit`, `market_sample_count`) may be `None`/`0` and are treated as valid in Stage 4
+
 ## Architecture
 
 ```
