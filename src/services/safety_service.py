@@ -6,7 +6,6 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.repositories import fetch_sale_trades
-from src.models.real_trade import RealTrade
 
 
 class SafetyService:

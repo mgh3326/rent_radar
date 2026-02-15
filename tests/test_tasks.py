@@ -9,7 +9,6 @@ from src.crawlers.base import CrawlResult
 from src.db.repositories import RealTradeUpsert
 from src.crawlers.public_api import PublicApiCrawler
 from src.taskiq_app.tasks import crawl_real_trade, enqueue_crawl_real_trade
-from src.config import Settings, get_settings
 
 
 @pytest.mark.anyio
@@ -196,7 +195,6 @@ async def test_crawl_real_trade_with_date_range(
 async def test_public_api_crawler_with_multiple_property_types() -> None:
     """PublicApiCrawler generates mock data for all property types when API key is empty."""
 
-    import os
 
 
 @pytest.mark.anyio

@@ -1,11 +1,9 @@
 """Business logic for listing comparison."""
 
-from typing import cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.repositories import fetch_listings
-from src.models.listing import Listing
+from src.db.repositories import fetch_listings_by_ids, fetch_market_stats
 
 
 class ComparisonService:
@@ -38,9 +36,11 @@ class ComparisonService:
                 "comparisons": [],
             }
 
-        all_listings = await fetch_listings(self._session, is_active=True, limit=10)
+        all_listings = await fetch_listings_by_ids(
+            self._session, listing_ids, is_active=True
+        )
 
-        listings_map = {lst.id: lst for lst in all_listings if lst.id in listing_ids}
+        listings_map = {lst.id: lst for lst in all_listings}
 
         found_ids = list(listings_map.keys())
         missing_ids = [lid for lid in listing_ids if lid not in found_ids]
@@ -53,30 +53,47 @@ class ComparisonService:
                 "comparisons": [],
             }
 
-        from decimal import Decimal
+        comparisons = []
+        for lst in listings_map.values():
+            market = await fetch_market_stats(
+                self._session,
+                property_type=lst.property_type,
+                dong=lst.dong,
+                area_m2=lst.area_m2,
+            )
 
-        comparisons = [
-            {
-                "id": lst.id,
-                "source": lst.source,
-                "property_type": lst.property_type,
-                "rent_type": lst.rent_type,
-                "deposit": lst.deposit,
-                "monthly_rent": lst.monthly_rent,
-                "total_cost": lst.deposit + (lst.monthly_rent * 100),
-                "address": lst.address,
-                "dong": lst.dong,
-                "area_m2": float(lst.area_m2) if lst.area_m2 else None,
-                "floor": lst.floor,
-                "total_floors": lst.total_floors,
-                "price_per_m2": (
-                    float(lst.deposit / lst.area_m2)
-                    if lst.area_m2 and lst.area_m2 > 0
-                    else None
-                ),
-            }
-            for lst in list(listings_map.values())
-        ]
+            market_avg_deposit = market.avg_deposit if market else None
+            market_sample_count = market.sample_count if market else 0
+            deposit_vs_market_ratio = None
+            if market_avg_deposit and market_avg_deposit > 0:
+                deposit_vs_market_ratio = round(lst.deposit / market_avg_deposit, 4)
+
+            comparisons.append(
+                {
+                    "id": lst.id,
+                    "source": lst.source,
+                    "property_type": lst.property_type,
+                    "rent_type": lst.rent_type,
+                    "deposit": lst.deposit,
+                    "monthly_rent": lst.monthly_rent,
+                    "total_cost": lst.deposit + (lst.monthly_rent * 100),
+                    "address": lst.address,
+                    "dong": lst.dong,
+                    "area_m2": float(lst.area_m2) if lst.area_m2 else None,
+                    "floor": lst.floor,
+                    "total_floors": lst.total_floors,
+                    "price_per_m2": (
+                        float(lst.deposit / lst.area_m2)
+                        if lst.area_m2 and lst.area_m2 > 0
+                        else None
+                    ),
+                    "market_avg_deposit": int(market_avg_deposit)
+                    if market_avg_deposit
+                    else None,
+                    "deposit_vs_market_ratio": deposit_vs_market_ratio,
+                    "market_sample_count": market_sample_count,
+                }
+            )
 
         return {
             "status": "success",
@@ -93,12 +110,13 @@ class ComparisonService:
         if not comparisons:
             return {}
 
-        deposits = [c["deposit"] for c in comparisons]
-        monthly_rents = [c["monthly_rent"] for c in comparisons]
-        areas = [c["area_m2"] for c in comparisons if c["area_m2"] is not None]
-        floors = [c["floor"] for c in comparisons if c["floor"] is not None]
+        deposits: list[int] = [c["deposit"] for c in comparisons]  # type: ignore[assignment]
+        monthly_rents: list[int] = [c["monthly_rent"] for c in comparisons]  # type: ignore[assignment]
+        areas: list[float] = [
+            c["area_m2"] for c in comparisons if c["area_m2"] is not None
+        ]  # type: ignore[assignment]
+        floors: list[int] = [c["floor"] for c in comparisons if c["floor"] is not None]  # type: ignore[assignment]
 
-        from decimal import Decimal
 
         summary = {
             "min_deposit": min(deposits),

@@ -104,22 +104,56 @@ def _shift_month(year: int, month: int, offset: int = 0) -> tuple[int, int]:
 class PublicApiCrawler:
     """Crawler for MOLIT public API real trade data."""
 
-    def __init__(self, settings: Settings | None = None):
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        *,
+        region_codes: list[str] | None = None,
+        property_types: list[str] | None = None,
+        start_year_month: str | None = None,
+        end_year_month: str | None = None,
+    ):
         self._settings = settings or get_settings()
-        self._property_types = self._settings.target_property_types
-        self._region_codes = self._settings.target_region_codes
+        self._property_types = property_types or self._settings.target_property_types
+        self._region_codes = region_codes or self._settings.target_region_codes
+        self._start_year_month = start_year_month
+        self._end_year_month = end_year_month
 
     def _target_months(self) -> list[str]:
         """Generate target months in YYYYMM format."""
+        if self._start_year_month:
+            start_ym = int(self._start_year_month[:6])
+            if self._end_year_month:
+                end_ym = int(self._end_year_month[:6])
+            else:
+                end_ym = start_ym
+            months: list[str] = []
+            ym = start_ym
+            while ym <= end_ym:
+                year = ym // 100
+                month = ym % 100
+                months.append(f"{year}{month:02d}")
+                month += 1
+                if month > 12:
+                    month = 1
+                    year += 1
+                ym = year * 100 + month
+            return months
+
         now = datetime.now(UTC)
-        months: list[str] = []
+        months = []
         for offset in range(self._settings.public_data_fetch_months):
             year, month = _shift_month(now.year, now.month, offset)
             months.append(f"{year}{month:02d}")
         return months
 
     async def _request_xml(
-        self, client, property_type: str, region_code: str, deal_ymd: str, page_no: int = 1
+        self,
+        client,
+        property_type: str,
+        region_code: str,
+        deal_ymd: str,
+        page_no: int = 1,
     ) -> str:
         """Fetch XML response from public API."""
         config = PROPERTY_TYPE_CONFIG.get(property_type, {})

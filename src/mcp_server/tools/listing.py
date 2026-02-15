@@ -1,11 +1,16 @@
 """MCP tools for rental listing search."""
 
+import json
 from decimal import Decimal
 
 from mcp.server.fastmcp import FastMCP
 
+from src.cache import build_search_cache_key, cache_get, cache_set
+from src.config import get_settings
 from src.db.session import session_context
 from src.services.listing_service import ListingService
+
+settings = get_settings()
 
 
 def register_listing_tools(mcp: FastMCP) -> None:
@@ -27,23 +32,28 @@ def register_listing_tools(mcp: FastMCP) -> None:
         max_floor: int | None = None,
         limit: int = 50,
     ) -> dict[str, object]:
-        """Search rental listings with optional filters.
+        cache_key = build_search_cache_key(
+            region_code=region_code,
+            dong=dong,
+            property_type=property_type,
+            rent_type=rent_type,
+            min_deposit=min_deposit,
+            max_deposit=max_deposit,
+            min_monthly_rent=min_monthly_rent,
+            max_monthly_rent=max_monthly_rent,
+            min_area=min_area,
+            max_area=max_area,
+            min_floor=min_floor,
+            max_floor=max_floor,
+            source=None,
+            limit=limit,
+        )
 
-        Args:
-            region_code: 5-digit region code (e.g., 11110 for Jongno-gu)
-            dong: Legal dong name (optional, filters by dong name)
-            property_type: Property type - "apt" (아파트), "villa" (연립다세대), "officetel" (오피스텔)
-            rent_type: Rent type - "jeonse" (전세), "monthly" (월세)
-            min_deposit: Minimum deposit amount (in ten thousand won)
-            max_deposit: Maximum deposit amount (in ten thousand won)
-            min_monthly_rent: Minimum monthly rent (in ten thousand won)
-            max_monthly_rent: Maximum monthly rent (in ten thousand won)
-            min_area: Minimum area in square meters
-            max_area: Maximum area in square meters
-            min_floor: Minimum floor number
-            max_floor: Maximum floor number
-            limit: Maximum number of results to return (default: 50)
-        """
+        cached = await cache_get(cache_key)
+        if cached:
+            result = json.loads(cached)
+            result["cache_hit"] = True
+            return result
 
         async with session_context() as session:
             service = ListingService(session)
@@ -63,7 +73,8 @@ def register_listing_tools(mcp: FastMCP) -> None:
                 is_active=True,
                 limit=limit,
             )
-        return {
+
+        result = {
             "query": {
                 "region_code": region_code,
                 "dong": dong,
@@ -81,4 +92,8 @@ def register_listing_tools(mcp: FastMCP) -> None:
             },
             "count": len(results),
             "items": results,
+            "cache_hit": False,
         }
+
+        await cache_set(cache_key, result, settings.listing_cache_ttl_seconds)
+        return result

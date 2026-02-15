@@ -10,7 +10,7 @@ import httpx
 from src.config import get_settings
 from src.config.region_codes import region_codes_to_district_names
 from src.crawlers.base import CrawlResult
-from src.db.repositories import ListingUpsert, fetch_listings
+from src.db.repositories import ListingUpsert
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

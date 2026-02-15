@@ -24,6 +24,8 @@ class Favorite(Base):
     listing_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("listings.id"), nullable=False
     )
+    deposit_at_save: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    monthly_rent_at_save: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

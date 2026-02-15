@@ -1,7 +1,6 @@
 """Business logic for listing searches."""
 
 from decimal import Decimal
-from typing import cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

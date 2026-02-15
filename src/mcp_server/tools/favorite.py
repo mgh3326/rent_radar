@@ -11,54 +11,67 @@ def register_favorite_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="add_favorite")
     async def add_favorite(user_id: str, listing_id: int) -> dict[str, object]:
-        """Add a listing to user favorites.
-
-        Args:
-            user_id: User identifier (e.g., email or user ID)
-            listing_id: Listing ID to add to favorites
-
-        Returns:
-            Status indicating if the listing was added or already existed
-        """
-
         async with session_context() as session:
             service = FavoriteService(session)
             result = await service.add_favorite(user_id, listing_id)
-
         return result
 
     @mcp.tool(name="list_favorites")
     async def list_favorites(user_id: str, limit: int = 50) -> dict[str, object]:
-        """List all favorites for a user with listing details.
-
-        Args:
-            user_id: User identifier
-            limit: Maximum number of results to return (default: 50)
-
-        Returns:
-            List of favorites with full listing details
-        """
-
         async with session_context() as session:
             service = FavoriteService(session)
             results = await service.list_favorites(user_id, limit)
-
         return {"user_id": user_id, "count": len(results), "items": results}
 
     @mcp.tool(name="remove_favorite")
     async def remove_favorite(user_id: str, listing_id: int) -> dict[str, object]:
-        """Remove a listing from user favorites.
-
-        Args:
-            user_id: User identifier
-            listing_id: Listing ID to remove from favorites
-
-        Returns:
-            Status indicating if the favorite was removed or not found
-        """
-
         async with session_context() as session:
             service = FavoriteService(session)
             result = await service.remove_favorite(user_id, listing_id)
-
         return result
+
+    @mcp.tool(name="manage_favorites")
+    async def manage_favorites(
+        action: str,
+        user_id: str,
+        listing_id: int | None = None,
+        limit: int = 50,
+    ) -> dict[str, object]:
+        async with session_context() as session:
+            service = FavoriteService(session)
+
+            if action == "add":
+                if listing_id is None:
+                    return {
+                        "error": "listing_id required for add action",
+                        "success": False,
+                    }
+                result = await service.add_favorite(user_id, listing_id)
+                result["action"] = "add"
+                return result
+
+            elif action == "remove":
+                if listing_id is None:
+                    return {
+                        "error": "listing_id required for remove action",
+                        "success": False,
+                    }
+                result = await service.remove_favorite(user_id, listing_id)
+                result["action"] = "remove"
+                return result
+
+            elif action == "list":
+                results = await service.list_favorites(user_id, limit)
+                return {
+                    "action": "list",
+                    "user_id": user_id,
+                    "count": len(results),
+                    "items": results,
+                    "success": True,
+                }
+
+            else:
+                return {
+                    "error": f"Unknown action: {action}. Use 'add', 'remove', or 'list'.",
+                    "success": False,
+                }

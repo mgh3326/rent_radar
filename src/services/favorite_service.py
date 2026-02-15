@@ -6,10 +6,9 @@ from src.db.repositories import (
     FavoriteUpsert,
     delete_favorite,
     fetch_favorites,
-    fetch_listings,
+    fetch_listings_by_ids,
     upsert_favorites,
 )
-from src.models.favorite import Favorite
 
 
 class FavoriteService:
@@ -21,11 +20,31 @@ class FavoriteService:
         self._session = session
 
     async def add_favorite(self, user_id: str, listing_id: int) -> dict[str, object]:
-        """Add a listing to user favorites."""
+        """Add a listing to user favorites with price snapshot."""
+
+        listings = await fetch_listings_by_ids(
+            self._session, [listing_id], is_active=True
+        )
+        listing = listings[0] if listings else None
+
+        if not listing:
+            return {
+                "user_id": user_id,
+                "listing_id": listing_id,
+                "status": "not_found",
+                "message": "Listing not found or inactive",
+            }
 
         inserted = await upsert_favorites(
             self._session,
-            [FavoriteUpsert(user_id=user_id, listing_id=listing_id)],
+            [
+                FavoriteUpsert(
+                    user_id=user_id,
+                    listing_id=listing_id,
+                    deposit_at_save=listing.deposit,
+                    monthly_rent_at_save=listing.monthly_rent,
+                )
+            ],
         )
 
         if inserted == 0:
@@ -56,11 +75,11 @@ class FavoriteService:
 
         listings_map = {
             lst.id: lst
-            for lst in await fetch_listings(self._session, is_active=True, limit=limit)
-            if lst.id in listing_ids
+            for lst in await fetch_listings_by_ids(
+                self._session, listing_ids, is_active=True
+            )
         }
 
-        from decimal import Decimal
 
         result = []
         for fav in favorites:
@@ -106,7 +125,6 @@ class FavoriteService:
     async def remove_favorite(self, user_id: str, listing_id: int) -> dict[str, object]:
         """Remove a listing from user favorites."""
 
-        from src.db.repositories import delete_favorite
 
         deleted = await delete_favorite(self._session, user_id, listing_id)
 

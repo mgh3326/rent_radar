@@ -30,7 +30,7 @@ def register_region_tools(mcp: FastMCP) -> None:
             if sido and sido_name != sido:
                 continue
 
-            for sigungu_name, code in sigungu_list.items():
+            for code, sigungu_name in sigungu_list:
                 if sigungu and sigungu_name != sigungu:
                     continue
 
@@ -76,7 +76,7 @@ def register_region_tools(mcp: FastMCP) -> None:
         matches = []
 
         for sido_name, sigungu_list in SIDO_SIGUNGU.items():
-            for sigungu_name, code in sigungu_list.items():
+            for code, sigungu_name in sigungu_list:
                 full_name = f"{sido_name} {sigungu_name}"
                 if (
                     query_lower in sido_name.lower()

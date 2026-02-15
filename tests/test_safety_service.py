@@ -1,11 +1,20 @@
 """Tests for safety service scenarios."""
 
 from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.db.repositories import RealTrade
 from src.services.safety_service import SafetyService
+
+
+def _mock_session_with_trades(trades: list[RealTrade]) -> AsyncMock:
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = trades
+    session = AsyncMock()
+    session.execute.return_value = mock_result
+    return session
 
 
 @pytest.fixture
@@ -67,25 +76,19 @@ def sample_sale_trades():
 async def test_safety_service_safe_deposit(
     sample_sale_trades: list[RealTrade],
 ) -> None:
-    """SafetyService correctly identifies safe jeonse deposit."""
-
-    session_mock = AsyncMock()
-    session_mock.execute.return_value.scalars.return_value.all.return_value = (
-        sample_sale_trades
-    )
-
-    service = SafetyService(session_mock)
+    session = _mock_session_with_trades(sample_sale_trades)
+    service = SafetyService(session)
     result = await service.check_jeonse_safety(
-        deposit=35000,  # 35만 원 (avg: 50만 원)
+        deposit=35000,
         property_type="apt",
         region_code="11110",
         dong="사직동",
-        area_m2=Decimal("60.00"),  # Similar area
+        area_m2=Decimal("60.00"),
         period_months=12,
     )
 
     assert result["status"] == "safe"
-    assert result["safety_ratio"] == 0.7
+    assert result["safety_ratio"] == round(35000 / 55000, 4)
     assert result["avg_sale_price"] == 55000
     assert result["comparable_sales_count"] == 3
 
@@ -94,16 +97,10 @@ async def test_safety_service_safe_deposit(
 async def test_safety_service_caution_deposit(
     sample_sale_trades: list[RealTrade],
 ) -> None:
-    """SafetyService correctly identifies caution-level deposit."""
-
-    session_mock = AsyncMock()
-    session_mock.execute.return_value.scalars.return_value.all.return_value = (
-        sample_sale_trades
-    )
-
-    service = SafetyService(session_mock)
+    session = _mock_session_with_trades(sample_sale_trades)
+    service = SafetyService(session)
     result = await service.check_jeonse_safety(
-        deposit=50000,  # 50만 원 (avg: 55만 원)
+        deposit=45000,
         property_type="apt",
         region_code="11110",
         dong="사직동",
@@ -112,27 +109,21 @@ async def test_safety_service_caution_deposit(
     )
 
     assert result["status"] == "caution"
-    assert 0.9 < result["safety_ratio"] < 1.0
+    assert 0.7 <= float(result["safety_ratio"]) < 0.9
 
 
 @pytest.mark.anyio
 async def test_safety_service_unsafe_deposit(
     sample_sale_trades: list[RealTrade],
 ) -> None:
-    """SafetyService correctly identifies unsafe deposit."""
-
-    session_mock = AsyncMock()
-    session_mock.execute.return_value.scalars.return_value.all.return_value = (
-        sample_sale_trades
-    )
-
-    service = SafetyService(session_mock)
+    session = _mock_session_with_trades(sample_sale_trades)
+    service = SafetyService(session)
     result = await service.check_jeonse_safety(
-        deposit=55000,  # 55만 원 (avg: 55만 원)
+        deposit=55000,
         property_type="apt",
         region_code="11110",
         dong="사직동",
-        area_m2=Decimal("55.00"),  # Exact match
+        area_m2=Decimal("55.00"),
         period_months=12,
     )
 
@@ -144,12 +135,8 @@ async def test_safety_service_unsafe_deposit(
 async def test_safety_service_no_comparable_sales(
     sample_sale_trades: list[RealTrade],
 ) -> None:
-    """SafetyService returns unknown status when no comparable sales exist."""
-
-    session_mock = AsyncMock()
-    session_mock.execute.return_value.scalars.return_value.all.return_value = []
-
-    service = SafetyService(session_mock)
+    session = _mock_session_with_trades([])
+    service = SafetyService(session)
     result = await service.check_jeonse_safety(
         deposit=35000,
         property_type="apt",
@@ -168,16 +155,9 @@ async def test_safety_service_no_comparable_sales(
 async def test_safety_service_area_filtering(
     sample_sale_trades: list[RealTrade],
 ) -> None:
-    """SafetyService filters by area when specified."""
-
-    session_mock = AsyncMock()
-
-    filtered_trades = [t for t in sample_sale_trades if t.area_m2 == Decimal("60.00")]
-    session_mock.execute.return_value.scalars.return_value.all.return_value = (
-        filtered_trades
-    )
-
-    service = SafetyService(session_mock)
+    filtered = [t for t in sample_sale_trades if t.area_m2 == Decimal("60.00")]
+    session = _mock_session_with_trades(filtered)
+    service = SafetyService(session)
     result = await service.check_jeonse_safety(
         deposit=35000,
         property_type="apt",
@@ -192,22 +172,18 @@ async def test_safety_service_area_filtering(
 
 
 @pytest.mark.anyio
-async def test_safety_service_period_months() -> None:
-    """SafetyService respects custom period_months parameter."""
-
-    session_mock = AsyncMock()
-    session_mock.execute.return_value.scalars.return_value.all.return_value = (
-        sample_sale_trades
-    )
-
-    service = SafetyService(session_mock)
+async def test_safety_service_period_months(
+    sample_sale_trades: list[RealTrade],
+) -> None:
+    session = _mock_session_with_trades(sample_sale_trades)
+    service = SafetyService(session)
     result = await service.check_jeonse_safety(
         deposit=35000,
         property_type="apt",
         region_code="11110",
         dong="사직동",
         area_m2=Decimal("60.00"),
-        period_months=6,  # Last 6 months only
+        period_months=6,
     )
 
     assert result["comparable_sales_count"] == 3

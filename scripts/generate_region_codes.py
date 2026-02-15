@@ -12,7 +12,6 @@ from collections import defaultdict
 from pathlib import Path
 
 import httpx
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")

@@ -144,12 +144,14 @@ class NaverCrawler:
         return []
 
     def _parse_article(self, article: dict, region_code: str) -> ListingUpsert | None:
-        """Parse single article to ListingUpsert."""
+        article_no = article.get("articleNo", "")
+        if not article_no:
+            return None
 
         try:
             return ListingUpsert(
                 source="naver",
-                source_id=str(article.get("articleNo", "")),
+                source_id=str(article_no),
                 property_type=PROPERTY_TYPE_MAP.get(
                     article.get("realEstateType", "APT"), "apt"
                 ),

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}QA 콘솔 - Rent Radar{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>🧪 QA 콘솔</h1>
+    <p>배포 전 점검: 자동 테스트 + 수동 이상치 점검 + MCP smoke 실행</p>
+
+    {% if deployment_ready %}
+    <div class="alert alert-success">
+        배포 준비 상태: blocker 0건 (warning {{ warning_count }}건)
+    </div>
+    {% else %}
+    <div class="alert alert-warning">
+        배포 준비 미완료: blocker {{ blocker_count }}건, warning {{ warning_count }}건
+    </div>
+    {% endif %}
+
+    <section class="section">
+        <h2>수동 실행</h2>
+        <div class="summary-cards">
+            <div class="card">
+                <h3>공공데이터 Crawl</h3>
+                <form action="/web/crawl" method="post">
+                    <label for="region_code">지역 코드</label>
+                    <select id="region_code" name="region_code">
+                        {% for sido, districts in sido_sigungu.items() %}
+                            <optgroup label="{{ sido }}">
+                                {% for code, name in districts %}
+                                    <option value="{{ code }}" {% if code == '11110' %}selected{% endif %}>{{ name }}</option>
+                                {% endfor %}
+                            </optgroup>
+                        {% endfor %}
+                    </select>
+
+                    <label for="property_type">매물유형</label>
+                    <select id="property_type" name="property_type">
+                        <option value="apt" selected>아파트</option>
+                        <option value="villa">연립다세대</option>
+                        <option value="officetel">오피스텔</option>
+                    </select>
+
+                    <label for="start_year_month">시작 YYYYMM (선택)</label>
+                    <input id="start_year_month" name="start_year_month" placeholder="202501" value="">
+
+                    <label for="end_year_month">종료 YYYYMM (선택)</label>
+                    <input id="end_year_month" name="end_year_month" placeholder="202503" value="">
+
+                    <label>
+                        <input type="checkbox" name="force" value="true">
+                        dedup 우회(force)
+                    </label>
+                    <button type="submit">공공데이터 수집 실행</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h3>매물 Crawl</h3>
+                <form action="/web/crawl-listings" method="post">
+                    <label for="source">소스</label>
+                    <select id="source" name="source">
+                        <option value="all" selected>전체</option>
+                        <option value="naver">네이버</option>
+                        <option value="zigbang">직방</option>
+                    </select>
+
+                    <label>
+                        <input type="checkbox" name="force" value="true">
+                        dedup 우회(force)
+                    </label>
+                    <button type="submit">매물 수집 실행</button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <section class="section">
+        <h2>최근 24시간 수집 스냅샷</h2>
+        <div class="summary-cards">
+            {% for snapshot in snapshots %}
+            <div class="card">
+                <h3>{{ snapshot.source }} ({{ snapshot.table_name }})</h3>
+                <div class="value">{{ "{:,}".format(snapshot.last_24h_count) }}</div>
+                <p>최근 24시간 수집</p>
+                <p>전체 누적: {{ "{:,}".format(snapshot.total_count) }}</p>
+                <p>마지막 업데이트: {{ snapshot.last_updated or '-' }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="section">
+        <h2>데이터 품질 이슈 (상위 20건)</h2>
+        {% if issues %}
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Table</th>
+                    <th>Severity</th>
+                    <th>Issue</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for issue in issues[:20] %}
+                <tr>
+                    <td>{{ issue.id }}</td>
+                    <td>{{ issue.table_name }}</td>
+                    <td>
+                        {% if issue.severity == 'blocker' %}
+                        <strong style="color:#b91c1c;">blocker</strong>
+                        {% else %}
+                        <span style="color:#92400e;">warning</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ issue.issue_type }}</td>
+                    <td>{{ issue.description }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>현재 감지된 품질 이슈가 없습니다.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

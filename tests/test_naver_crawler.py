@@ -5,7 +5,6 @@ from decimal import Decimal
 import pytest
 
 from src.crawlers.naver import NaverCrawler
-from src.crawlers.base import CrawlResult
 
 
 @pytest.fixture
