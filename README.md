@@ -126,6 +126,43 @@ taskiq scheduler src.taskiq_app.broker:scheduler
 uv run pytest -q
 ```
 
+## Zigbang Crawler Troubleshooting
+
+- `https://apis.zigbang.com/v2/search` can return location/complex metadata (`id/type/name/_source`) instead of listing payloads.
+- The crawler now fails fast when `raw_count > 0` but `parsed_count == 0`.
+- This fail-fast behavior is expected and prevents polluted data (`source_id=""`) from being inserted.
+
+### Zigbang schema fixture (representative sample)
+
+The regression fixture contains 12 representative items selected for meaningful diversity:
+- `tests/fixtures/zigbang_search_jongro_representative.json`
+
+**Selection criteria (non-random, fixed IDs):**
+- Type diversity: `address` (1) + `apartment` (11)
+- Region diversity (local3): 평창동/무악동/동숭동/창신동/숭인동/신문로2가/교북동/당주동/통인동/익선동
+- Value diversity: 오래된/최신 사용승인일 (1966~2025), household 최소/최대 (37~964)
+
+**Metadata preserves:**
+- `observed_total_items_raw` / `observed_unique_ids`: capture-time observation snapshot values (can change on refresh)
+- `representative_item_ids`: fixed 12 IDs for reproducibility
+- `representative_item_count`: fixed to 12
+
+Regression tests validate contract/invariants (`representative IDs` + `observed_total_items_raw >= observed_unique_ids >= representative_item_count`) rather than hardcoding snapshot counts.
+
+To refresh the fixture:
+
+```bash
+uv run python scripts/build_zigbang_representative_fixture.py
+```
+
+### Regression checks
+
+```bash
+uv run pytest tests/test_zigbang_crawler.py -q
+uv run pytest tests/test_tasks.py tests/test_web_router_qa.py -q
+uv run python scripts/e2e_zigbang_mcp_check.py --reset-scope full --confirm-reset RESET_ALL
+```
+
 ## Architecture
 
 ```

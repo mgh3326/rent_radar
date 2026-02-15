@@ -1,0 +1,12 @@
+{
+  "item_id": "987654321",
+  "property_type_code": "A2",
+  "sales_type_code": "G2",
+  "deposit": "25,000",
+  "rent": "80",
+  "address": "서울특별시 종로구 사직동 123-45",
+  "full_address": "서울특별시 종로구 사직동 123-45 101동 101호",
+  "exclusive_area_m2": "59.84",
+  "floor1": "9",
+  "comment": "테스트 매물"
+}

@@ -1,0 +1,591 @@
+{
+  "metadata": {
+    "captured_at": "2026-02-15T01:27:04.064254+00:00",
+    "region_name": "종로구",
+    "request_matrix": [
+      {
+        "region_name": "종로구",
+        "property_type": "아파트",
+        "type_code": "A1",
+        "rent_type": "전세",
+        "sales_code": "G1",
+        "count": 51,
+        "code": "200",
+        "message": null
+      },
+      {
+        "region_name": "종로구",
+        "property_type": "아파트",
+        "type_code": "A1",
+        "rent_type": "월세",
+        "sales_code": "G2",
+        "count": 51,
+        "code": "200",
+        "message": null
+      },
+      {
+        "region_name": "종로구",
+        "property_type": "빌라/연립",
+        "type_code": "A2",
+        "rent_type": "전세",
+        "sales_code": "G1",
+        "count": 51,
+        "code": "200",
+        "message": null
+      },
+      {
+        "region_name": "종로구",
+        "property_type": "빌라/연립",
+        "type_code": "A2",
+        "rent_type": "월세",
+        "sales_code": "G2",
+        "count": 51,
+        "code": "200",
+        "message": null
+      },
+      {
+        "region_name": "종로구",
+        "property_type": "오피스텔",
+        "type_code": "A4",
+        "rent_type": "전세",
+        "sales_code": "G1",
+        "count": 51,
+        "code": "200",
+        "message": null
+      },
+      {
+        "region_name": "종로구",
+        "property_type": "오피스텔",
+        "type_code": "A4",
+        "rent_type": "월세",
+        "sales_code": "G2",
+        "count": 51,
+        "code": "200",
+        "message": null
+      }
+    ],
+    "observed_total_items_raw": 306,
+    "observed_unique_ids": 51,
+    "representative_item_ids": [
+      8214,
+      14060,
+      2815,
+      27544,
+      12472,
+      86875,
+      79222,
+      14794,
+      59332,
+      77125,
+      9174,
+      38010
+    ],
+    "representative_item_count": 12
+  },
+  "items": [
+    {
+      "id": 8214,
+      "type": "address",
+      "name": "종로구",
+      "hint": "",
+      "description": "서울특별시 종로구",
+      "lat": 37.5730247497559,
+      "lng": 126.979637145996,
+      "zoom": 7,
+      "polygon": [],
+      "_score": null,
+      "_source": {
+        "name_length": 3,
+        "local1": "서울시",
+        "local2": "종로구",
+        "local3": null,
+        "web_level": 14,
+        "web_lat": 37.5730247497559,
+        "web_lng": 126.979637145996,
+        "app_level": 13,
+        "app_lat": 37.5730247497559,
+        "app_lng": 126.979637145996,
+        "법정동코드": "1111000000"
+      },
+      "zoom_level": {
+        "google": 13,
+        "daum": 6
+      },
+      "zoom_level_v2": {
+        "app": 8,
+        "web": 6
+      }
+    },
+    {
+      "id": 14060,
+      "type": "apartment",
+      "name": "갑을",
+      "hint": "아파트",
+      "description": "서울특별시 종로구 평창동",
+      "lat": 37.6046104,
+      "lng": 126.963839,
+      "zoom": 3,
+      "polygon": [],
+      "_score": null,
+      "_source": {
+        "name_length": 2,
+        "서비스구분": "입주2년후",
+        "local1": "서울특별시",
+        "local2": "종로구",
+        "local3": "평창동",
+        "address2": "595",
+        "신주소": "서울시 종로구 평창문화로 19",
+        "floor": 13,
+        "enabled2": 4,
+        "법정동코드": "1111018300",
+        "사용승인일": "19970828",
+        "pnu": "1111018300105950000",
+        "household": 99,
+        "suggestions": [
+          "갑을명가",
+          "갑을시티텔",
+          "서울시종로구평창동595",
+          "서울시종로구평창문화로19"
+        ],
+        "suggestions_insensitive": [],
+        "구주소": "서울시 종로구 평창동 595",
+        "distance": 1000
+      },
+      "zoom_level": {
+        "google": 15.5,
+        "daum": 3
+      },
+      "zoom_level_v2": {
+        "app": 4,
+        "web": 4
+      }
+    },
+    {
+      "id": 27544,
+      "type": "apartment",
+      "name": "동성",
+      "hint": "아파트",
+      "description": "서울특별시 종로구 동숭동",
+      "lat": 37.5834425,
+      "lng": 127.006274,
+      "zoom": 3,
+      "polygon": [],
+      "_score": null,
+      "_source": {
+        "name_length": 2,
+        "서비스구분": "입주2년후",
+        "local1": "서울특별시",
+        "local2": "종로구",
+        "local3": "동숭동",
+        "address2": "4-161",
+        "신주소": "서울시 종로구 동숭4라길 29",
+        "floor": 6,
+        "enabled2": 4,
+        "법정동코드": "1111016800",
+        "사용승인일": "19990821",
+        "pnu": "1111016800100040161",
+        "household": 37,
+        "suggestions": [
+          "서울시종로구동숭동4-161",
+          "서울시종로구동숭4라길29"
+        ],
+        "suggestions_insensitive": [],
+        "구주소": "서울시 종로구 동숭동 4-161",
+        "distance": 1000
+      },
+      "zoom_level": {
+        "google": 15.5,
+        "daum": 3
+      },
+      "zoom_level_v2": {
+        "app": 4,
+        "web": 4
+      }
+    },
+    {
+      "id": 14794,
+      "type": "apartment",
+      "name": "동아",
+      "hint": "아파트",
+      "description": "서울특별시 종로구 교북동",
+      "lat": 37.57144574617705,
+      "lng": 126.96205617765538,
+      "zoom": 3,
+      "polygon": [],
+      "_score": null,
+      "_source": {
+        "name_length": 2,
+        "서비스구분": "입주2년후",
+        "local1": "서울특별시",
+        "local2": "종로구",
+        "local3": "교북동",
+        "address2": "101",
+        "신주소": "서울시 종로구 송월길 147",
+        "floor": 11,
+        "enabled2": 4,
+        "법정동코드": "1111018000",
+        "사용승인일": "19951110",
+        "pnu": "1111018000101010000",
+        "household": 48,
+        "suggestions": [
+          "서울시종로구교북동101",
+          "서울시종로구송월길147"
+        ],
+        "suggestions_insensitive": [],
+        "구주소": "서울시 종로구 교북동 101",
+        "distance": 1000
+      },
+      "zoom_level": {
+        "google": 15.5,
+        "daum": 3
+      },
+      "zoom_level_v2": {
+        "app": 4,
+        "web": 4
+      }
+    },
+    {
+      "id": 77125,
+      "type": "apartment",
+      "name": "효자",
+      "hint": "아파트",
+      "description": "서울특별시 종로구 통인동",
+      "lat": 37.5808978254645,
+      "lng": 126.970650954669,
+      "zoom": 3,
+      "polygon": [],
+      "_score": null,
+      "_source": {
+        "name_length": 2,
+        "서비스구분": "입주2년후",
+        "local1": "서울특별시",
+        "local2": "종로구",
+        "local3": "통인동",
+        "address2": "5-1",
+        "신주소": "서울시 종로구 자하문로 55",
+        "floor": 5,
+        "enabled2": 4,
+        "법정동코드": "1111010800",
+        "사용승인일": "19691201",
+        "pnu": "1111010800100050001",
+        "household": 41,
+        "suggestions": [
+          "서울시종로구통인동5-1",
+          "서울시종로구자하문로55"
+        ],
+        "suggestions_insensitive": [],
+        "구주소": "서울시 종로구 통인동 5-1",
+        "distance": 1000
+      },
+      "zoom_level": {
+        "google": 15.5,
+        "daum": 3
+      },
+      "zoom_level_v2": {
+        "app": 4,
+        "web": 4
+      }
+    },
+    {
+      "id": 12472,
+      "type": "apartment",
+      "name": "동대문",
+      "hint": "아파트",
+      "description": "서울특별시 종로구 창신동",
+      "lat": 37.572268970644,
+      "lng": 127.0151867521438,
+      "zoom": 3,
+      "polygon": [],
+      "_score": null,
+      "_source": {
+        "name_length": 3,
+        "서비스구분": "입주2년후",
+        "local1": "서울특별시",
+        "local2": "종로구",
+        "local3": "창신동",
+        "address2": "328-17",
+        "신주소": "서울시 종로구 지봉로 25",
+        "floor": 6,
+        "enabled2": 4,
+        "법정동코드": "1111017400",
+        "사용승인일": "19660316",
+        "pnu": "1111017400103280017",
+        "household": 131,
+        "suggestions": [
+          "동데문",
+          "서울시종로구창신동328-17",
+          "서울시종로구지봉로25"
+        ],
+        "suggestions_insensitive": [],
+        "구주소": "서울시 종로구 창신동 328-17",
+        "distance": 1000
+      },
+      "zoom_level": {
+        "google": 15.5,
+        "daum": 3
+      },
+      "zoom_level_v2": {
+        "app": 4,
+        "web": 4
+      }
+    },
+    {
+      "id": 59332,
+      "type": "apartment",
+      "name": "미도파",
+      "hint": "아파트",
+      "description": "서울특별시 종로구 당주동",
+      "lat": 37.5714331417127,
+      "lng": 126.973676477426,
+      "zoom": 3,
+      "polygon": [],
+      "_score": null,
+      "_source": {
+        "name_length": 3,
+        "서비스구분": "입주2년후",
+        "local1": "서울특별시",
+        "local2": "종로구",
+        "local3": "당주동",
+        "address2": "145",
+        "신주소": "서울시 종로구 세종대로23길 47",
+        "floor": 10,
+        "enabled2": 4,
+        "법정동코드": "1111011700",
+        "사용승인일": "19811231",
+        "pnu": "1111011700101450000",
+        "household": 48,
+        "suggestions": [
+          "서울시종로구당주동145",
+          "서울시종로구세종대로23길47"
+        ],
+        "suggestions_insensitive": [],
+        "구주소": "서울시 종로구 당주동 145",
+        "distance": 1000
+      },
+      "zoom_level": {
+        "google": 15.5,
+        "daum": 3
+      },
+      "zoom_level_v2": {
+        "app": 4,
+        "web": 4
+      }
+    },
+    {
+      "id": 79222,
+      "type": "apartment",
+      "name": "디팰리스",
+      "hint": "아파트",
+      "description": "서울특별시 종로구 신문로2가",
+      "lat": 37.5686112,
+      "lng": 126.971786,
+      "zoom": 3,
+      "polygon": [],
+      "_score": null,
+      "_source": {
+        "name_length": 4,
+        "서비스구분": "입주2년후",
+        "local1": "서울특별시",
+        "local2": "종로구",
+        "local3": "신문로2가",
+        "address2": "171",
+        "신주소": "서울시 종로구 새문안로2길 10",
+        "floor": 18,
+        "enabled2": 4,
+        "법정동코드": "1111012100",
+        "사용승인일": "20200815",
+        "pnu": "1111012100101710000",
+        "household": 58,
+        "suggestions": [
+          "서울시종로구신문로2가171",
+          "서울시종로구새문안로2길10"
+        ],
+        "suggestions_insensitive": [],
+        "구주소": "서울시 종로구 신문로2가 171",
+        "distance": 1000
+      },
+      "zoom_level": {
+        "google": 15.5,
+        "daum": 3
+      },
+      "zoom_level_v2": {
+        "app": 4,
+        "web": 4
+      }
+    },
+    {
+      "id": 2815,
+      "type": "apartment",
+      "name": "무악현대",
+      "hint": "아파트",
+      "description": "서울특별시 종로구 무악동",
+      "lat": 37.5756449,
+      "lng": 126.961091,
+      "zoom": 3,
+      "polygon": [],
+      "_score": null,
+      "_source": {
+        "name_length": 4,
+        "서비스구분": "입주2년후",
+        "local1": "서울특별시",
+        "local2": "종로구",
+        "local3": "무악동",
+        "address2": "82",
+        "신주소": "서울시 종로구 통일로 246-20",
+        "floor": 23,
+        "enabled2": 4,
+        "법정동코드": "1111018700",
+        "사용승인일": "20001021",
+        "pnu": "1111018700100820000",
+        "household": 964,
+        "suggestions": [
+          "무악현데",
+          "서울시종로구무악동82",
+          "서울시종로구통일로246-20"
+        ],
+        "suggestions_insensitive": [],
+        "구주소": "서울시 종로구 무악동 82",
+        "distance": 1000
+      },
+      "zoom_level": {
+        "google": 15.5,
+        "daum": 3
+      },
+      "zoom_level_v2": {
+        "app": 4,
+        "web": 4
+      }
+    },
+    {
+      "id": 86875,
+      "type": "apartment",
+      "name": "에비뉴청계Ⅱ",
+      "hint": "아파트",
+      "description": "서울특별시 종로구 숭인동",
+      "lat": 37.5732165,
+      "lng": 127.022351,
+      "zoom": 3,
+      "polygon": [],
+      "_score": null,
+      "_source": {
+        "name_length": 6,
+        "서비스구분": "입주2년내",
+        "local1": "서울특별시",
+        "local2": "종로구",
+        "local3": "숭인동",
+        "address2": "1420",
+        "신주소": "서울시 종로구 난계로29가길 28",
+        "floor": 16,
+        "enabled2": 4,
+        "법정동코드": "1111017500",
+        "사용승인일": "20250430",
+        "pnu": "1111017500114200000",
+        "household": 81,
+        "suggestions": [
+          "에비뉴청계2",
+          "서울시종로구숭인동1420",
+          "서울시종로구난계로29가길28"
+        ],
+        "suggestions_insensitive": [],
+        "구주소": "서울시 종로구 숭인동 1420",
+        "distance": 1000
+      },
+      "zoom_level": {
+        "google": 15.5,
+        "daum": 3
+      },
+      "zoom_level_v2": {
+        "app": 4,
+        "web": 4
+      }
+    },
+    {
+      "id": 9174,
+      "type": "apartment",
+      "name": "현대뜨레비앙",
+      "hint": "아파트",
+      "description": "서울특별시 종로구 익선동",
+      "lat": 37.57511306843629,
+      "lng": 126.99005623849528,
+      "zoom": 3,
+      "polygon": [],
+      "_score": null,
+      "_source": {
+        "name_length": 6,
+        "서비스구분": "입주2년후",
+        "local1": "서울특별시",
+        "local2": "종로구",
+        "local3": "익선동",
+        "address2": "55",
+        "신주소": "서울시 종로구 돈화문로11가길 59",
+        "floor": 9,
+        "enabled2": 4,
+        "법정동코드": "1111013300",
+        "사용승인일": "20031129",
+        "pnu": "1111013300100550000",
+        "household": 291,
+        "suggestions": [
+          "현대뜨래비앙",
+          "현데뜨레비앙",
+          "서울시종로구익선동55",
+          "서울시종로구돈화문로11가길59"
+        ],
+        "suggestions_insensitive": [],
+        "구주소": "서울시 종로구 익선동 55",
+        "distance": 1000
+      },
+      "zoom_level": {
+        "google": 15.5,
+        "daum": 3
+      },
+      "zoom_level_v2": {
+        "app": 4,
+        "web": 4
+      }
+    },
+    {
+      "id": 38010,
+      "type": "apartment",
+      "name": "경희궁롯데캐슬",
+      "hint": "아파트",
+      "description": "서울특별시 종로구 무악동",
+      "lat": 37.5734211,
+      "lng": 126.959411,
+      "zoom": 3,
+      "polygon": [],
+      "_score": null,
+      "_source": {
+        "name_length": 7,
+        "서비스구분": "입주2년후",
+        "local1": "서울특별시",
+        "local2": "종로구",
+        "local3": "무악동",
+        "address2": "89",
+        "신주소": "서울시 종로구 통일로 230",
+        "floor": 16,
+        "enabled2": 4,
+        "법정동코드": "1111018700",
+        "사용승인일": "20190621",
+        "pnu": "1111018700100890000",
+        "household": 195,
+        "suggestions": [
+          "경희궁롯대캐슬",
+          "경희궁롯데케슬",
+          "서울시종로구무악동89",
+          "서울시종로구통일로230"
+        ],
+        "suggestions_insensitive": [],
+        "구주소": "서울시 종로구 무악동 89",
+        "distance": 1000
+      },
+      "zoom_level": {
+        "google": 15.5,
+        "daum": 3
+      },
+      "zoom_level_v2": {
+        "app": 4,
+        "web": 4
+      }
+    }
+  ]
+}
