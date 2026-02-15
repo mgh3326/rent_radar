@@ -163,6 +163,26 @@ uv run pytest tests/test_tasks.py tests/test_web_router_qa.py -q
 uv run python scripts/e2e_zigbang_mcp_check.py --reset-scope full --confirm-reset RESET_ALL
 ```
 
+## MCP `search_rent` Verification (Source-Only Seed)
+
+- Goal: verify `search_rent` tool behavior without crawler/worker dependencies.
+- Cleanup policy: delete only seed-source data (`source='zigbang_test_seed'`), not full tables.
+
+### Run
+
+```bash
+uv run python /Users/robin/PycharmProjects/rent_radar/scripts/e2e_mcp_search_rent_check.py --cleanup-scope source_only
+uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_search_rent.py -q
+```
+
+### Success criteria
+
+- First `search_rent` call: `cache_hit=false`
+- Second call with same query: `cache_hit=true`
+- `count > 0`
+- Returned items have non-empty `source_id`
+- Returned item count does not exceed `limit`
+
 ## Architecture
 
 ```
