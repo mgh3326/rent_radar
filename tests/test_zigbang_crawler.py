@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -113,6 +113,156 @@ async def test_parse_item_returns_none_for_search_payload(
 
 
 @pytest.mark.anyio
+async def test_run_parses_apartment_catalog_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    crawler = ZigbangCrawler(
+        region_names=["성남시분당구"],
+        region_codes=["41135"],
+        property_types=["아파트"],
+    )
+    apt_catalog_item = {
+        "areaHoId": 13099125,
+        "tranType": "rental",
+        "local1": "경기도",
+        "areaDanjiName": "산운마을13단지태영데시앙",
+        "local2": "성남시 분당구",
+        "local3": "운중동",
+        "depositMin": 50000,
+        "rentMin": 120,
+        "sizeM2": 84.92,
+        "dong": "1306동",
+        "itemTitle": "테스트 아파트 매물",
+        "itemIdList": [{"itemSource": "zigbang", "itemId": 47992593}],
+    }
+
+    async def fake_fetch_apt_item_catalogs(
+        _client: Any,
+        region_code: str | None,
+    ) -> list[dict[str, Any]]:
+        assert region_code == "41135"
+        return [apt_catalog_item]
+
+    async def fake_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(
+        crawler,
+        "_fetch_apt_item_catalogs",
+        fake_fetch_apt_item_catalogs,
+        raising=False,
+    )
+    monkeypatch.setattr("src.crawlers.zigbang.asyncio.sleep", fake_sleep)
+
+    result = await crawler.run()
+
+    assert result.count == 1
+    assert len(result.rows) == 1
+    row = result.rows[0]
+    assert row.source_id == "47992593"
+    assert row.property_type == "apt"
+    assert row.rent_type == "monthly"
+    assert row.deposit == 50000
+    assert row.monthly_rent == 120
+    assert row.address == "경기도 성남시 분당구 운중동"
+    assert row.dong == "운중동"
+    assert crawler.last_run_metrics["raw_count"] == 1
+    assert crawler.last_run_metrics["parsed_count"] == 1
+    assert crawler.last_run_metrics["invalid_count"] == 0
+
+@pytest.mark.anyio
+async def test_fetch_apt_item_catalogs_propagates_payload_local1(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    crawler = ZigbangCrawler(region_names=["성남시분당구"], property_types=["아파트"])
+    call_count = 0
+
+    async def fake_request_json_with_retry(
+        _client: Any,
+        _url: str,
+        params: dict[str, object] | None = None,
+    ) -> dict[str, Any] | None:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            assert params is not None
+            assert params.get("offset") == "0"
+            return {
+                "local1": "경기도",
+                "count": 1,
+                "list": [
+                    {
+                        "local2": "성남시 분당구",
+                        "local3": "정자동",
+                        "tranType": "charter",
+                        "depositMin": 55000,
+                        "rentMin": 0,
+                        "itemIdList": [{"itemId": 47981174}],
+                    }
+                ],
+            }
+        return {"local1": "경기도", "count": 1, "list": []}
+
+    monkeypatch.setattr(crawler, "_request_json_with_retry", fake_request_json_with_retry)
+
+    items = await crawler._fetch_apt_item_catalogs(cast(Any, object()), "41135")
+
+    assert len(items) == 1
+    assert items[0]["local1"] == "경기도"
+    assert call_count == 1
+
+
+@pytest.mark.anyio
+async def test_run_fetches_detail_payload_when_search_item_is_not_listing(
+    monkeypatch: pytest.MonkeyPatch,
+    zigbang_search_items: list[dict[str, Any]],
+    zigbang_valid_listing_item: dict[str, Any],
+) -> None:
+    """When search returns summary items, crawler should fetch details before parsing."""
+    crawler = ZigbangCrawler(region_names=["종로구"], property_types=["아파트"])
+    search_call_count = 0
+    detail_calls: list[str] = []
+    search_item = zigbang_search_items[1]
+    expected_item_id = str(search_item["id"])
+
+    async def fake_search_by_region_name(
+        _client: Any,
+        _region_name: str,
+        _property_type: str,
+        _rent_type: str,
+    ) -> list[dict[str, Any]]:
+        nonlocal search_call_count
+        search_call_count += 1
+        if search_call_count == 1:
+            return [search_item]
+        return []
+
+    async def fake_fetch_item_details(
+        _client: Any,
+        item_id: str,
+    ) -> dict[str, Any]:
+        detail_calls.append(item_id)
+        return {"items": [zigbang_valid_listing_item]}
+
+    async def fake_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(crawler, "_search_by_region_name", fake_search_by_region_name)
+    monkeypatch.setattr(crawler, "_fetch_item_details", fake_fetch_item_details)
+    monkeypatch.setattr("src.crawlers.zigbang.asyncio.sleep", fake_sleep)
+
+    result = await crawler.run()
+
+    assert result.count == 1
+    assert len(result.rows) == 1
+    assert result.rows[0].source_id == "987654321"
+    assert detail_calls == [expected_item_id]
+    assert crawler.last_run_metrics["raw_count"] == 1
+    assert crawler.last_run_metrics["parsed_count"] == 1
+    assert crawler.last_run_metrics["invalid_count"] == 0
+
+
+@pytest.mark.anyio
 async def test_run_raises_schema_mismatch_when_all_items_invalid(
     monkeypatch: pytest.MonkeyPatch,
     zigbang_search_items: list[dict[str, Any]],
@@ -136,7 +286,14 @@ async def test_run_raises_schema_mismatch_when_all_items_invalid(
     async def fake_sleep(_seconds: float) -> None:
         return None
 
+    async def fake_fetch_item_details(
+        _client: Any,
+        _item_id: str,
+    ) -> dict[str, Any] | None:
+        return None
+
     monkeypatch.setattr(crawler, "_search_by_region_name", fake_search_by_region_name)
+    monkeypatch.setattr(crawler, "_fetch_item_details", fake_fetch_item_details)
     monkeypatch.setattr("src.crawlers.zigbang.asyncio.sleep", fake_sleep)
 
     with pytest.raises(ZigbangSchemaMismatchError) as exc_info:

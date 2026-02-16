@@ -23,6 +23,7 @@ PROPERTY_TYPE_MAP: Final = {
     "오피스텔": "officetel",
 }
 BASE_URL: Final = "https://apis.zigbang.com/v2"
+APT_BASE_URL: Final = "https://apis.zigbang.com/apt/locals"
 DEFAULT_MAX_RETRIES: Final = 4
 DEFAULT_BASE_DELAY_SECONDS: Final = 1.0
 DEFAULT_MAX_BACKOFF_SECONDS: Final = 12.0
@@ -30,6 +31,10 @@ DEFAULT_COOLDOWN_SECONDS: Final = 20.0
 DEFAULT_COOLDOWN_THRESHOLD: Final = 3
 DEFAULT_JITTER_RATIO: Final = 0.2
 RETRYABLE_HTTP_STATUS_CODES: Final = frozenset({429, 500, 502, 503, 504})
+APT_TRAN_TYPE_MAP: Final = {
+    "charter": "jeonse",
+    "rental": "monthly",
+}
 
 
 class ZigbangSchemaMismatchError(RuntimeError):
@@ -48,6 +53,27 @@ def _to_int(value: object | None, default: int = 0) -> int:
         return int(cleaned)
     except ValueError:
         return default
+
+
+def _to_optional_int(value: object | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float, Decimal)):
+        return int(value)
+
+    cleaned = str(value).replace(",", "").replace(" ", "")
+    if cleaned == "":
+        return None
+
+    if cleaned.startswith("-"):
+        if cleaned[1:].isdigit():
+            return int(cleaned)
+        return None
+
+    if cleaned.isdigit():
+        return int(cleaned)
+
+    return None
 
 
 def _to_decimal(value: object | None) -> Decimal | None:
@@ -77,6 +103,28 @@ def _extract_source_id(item: dict[str, object]) -> str:
     return ""
 
 
+def _extract_apt_catalog_source_id(item: dict[str, object]) -> str:
+    item_id_list = item.get("itemIdList")
+    if isinstance(item_id_list, list):
+        for item_entry in item_id_list:
+            if not isinstance(item_entry, dict):
+                continue
+            raw_item_id = item_entry.get("itemId")
+            if raw_item_id is None:
+                continue
+            source_id = str(raw_item_id).strip()
+            if source_id:
+                return source_id
+
+    raw_area_ho_id = item.get("areaHoId")
+    if raw_area_ho_id is not None:
+        fallback_source_id = str(raw_area_ho_id).strip()
+        if fallback_source_id:
+            return fallback_source_id
+
+    return ""
+
+
 def _has_listing_core_fields(item: dict[str, object]) -> bool:
     return (
         "deposit" in item
@@ -85,12 +133,50 @@ def _has_listing_core_fields(item: dict[str, object]) -> bool:
     )
 
 
+def _normalize_item_dict(value: dict[object, object]) -> dict[str, object]:
+    return {str(key): item for key, item in value.items()}
+
+
+def _extract_detail_listing_candidates(
+    payload: dict[str, object],
+) -> list[dict[str, object]]:
+    candidates: list[dict[str, object]] = []
+
+    def append_dict(value: object) -> None:
+        if isinstance(value, dict):
+            candidates.append(_normalize_item_dict(value))
+
+    root_items = payload.get("items")
+    if isinstance(root_items, list):
+        for item in root_items:
+            append_dict(item)
+
+    append_dict(payload.get("item"))
+
+    root_data = payload.get("data")
+    if isinstance(root_data, dict):
+        normalized_data = _normalize_item_dict(root_data)
+        data_items = normalized_data.get("items")
+        if isinstance(data_items, list):
+            for item in data_items:
+                append_dict(item)
+        append_dict(normalized_data.get("item"))
+        if _has_listing_core_fields(normalized_data):
+            candidates.append(normalized_data)
+
+    if _has_listing_core_fields(payload):
+        candidates.append(payload)
+
+    return candidates
+
+
 class ZigbangCrawler:
     """Crawler for Zigbang rental listings using road map regions."""
 
     def __init__(
         self,
         region_names: list[str] | None = None,
+        region_codes: list[str] | None = None,
         property_types: list[str] | None = None,
         radius_km: int = 5,
         max_retries: int = DEFAULT_MAX_RETRIES,
@@ -101,6 +187,9 @@ class ZigbangCrawler:
     ) -> None:
         self._region_names = region_names or region_codes_to_district_names(
             settings.target_region_codes
+        )
+        self._region_codes = (
+            [str(code) for code in region_codes] if region_codes is not None else None
         )
         self._property_types = property_types or ["아파트", "빌라/연립", "오피스텔"]
         self._max_retries = max(0, max_retries)
@@ -180,17 +269,68 @@ class ZigbangCrawler:
         logger.warning(error_msg)
         return []
 
+    async def _fetch_apt_item_catalogs(
+        self,
+        client: httpx.AsyncClient,
+        region_code: str | None,
+    ) -> list[dict[str, object]]:
+        if not region_code:
+            return []
+
+        apt_url = f"{APT_BASE_URL}/{region_code}/item-catalogs"
+        page_size = 20
+        offset = 0
+        normalized_items: list[dict[str, object]] = []
+
+        while True:
+            payload = await self._request_json_with_retry(
+                client,
+                apt_url,
+                params={
+                    "tranTypeIn[0]": "trade",
+                    "tranTypeIn[1]": "charter",
+                    "tranTypeIn[2]": "rental",
+                    "includeOfferItem": "true",
+                    "offset": str(offset),
+                    "limit": str(page_size),
+                },
+            )
+            if not payload:
+                break
+
+            raw_items = payload.get("list")
+            if not isinstance(raw_items, list) or not raw_items:
+                break
+            local1 = payload.get("local1")
+            local1_value = str(local1).strip() if local1 is not None else ""
+            for item in raw_items:
+                if isinstance(item, dict):
+                    normalized_item = {str(key): value for key, value in item.items()}
+                    if local1_value and "local1" not in normalized_item:
+                        normalized_item["local1"] = local1_value
+                    normalized_items.append(normalized_item)
+            total_count = _to_int(payload.get("count"), 0)
+            offset += page_size
+
+            if len(raw_items) < page_size:
+                break
+            if total_count > 0 and offset >= total_count:
+                break
+
+        return normalized_items
+
     async def _request_json_with_retry(
         self,
         client: httpx.AsyncClient,
         url: str,
+        params: dict[str, object] | None = None,
     ) -> dict[str, object] | None:
         consecutive_429 = 0
         total_attempts = self._max_retries + 1
 
         for attempt in range(total_attempts):
             try:
-                response = await client.get(url, headers=self._headers)
+                response = await client.get(url, headers=self._headers, params=params)
                 _ = response.raise_for_status()
                 payload = response.json()
                 if isinstance(payload, dict):
@@ -254,11 +394,18 @@ class ZigbangCrawler:
     ) -> dict[str, object] | None:
         """Fetch detailed item information using Zigbang API."""
 
-        items_url = f"{BASE_URL}/items?item_ids={item_id}&detail=true"
-        payload = await self._request_json_with_retry(client, items_url)
-        if payload is None:
+        # v3 item endpoint is currently used by active Zigbang listing detail flows.
+        item_url = f"https://apis.zigbang.com/v3/items/{item_id}"
+        payload = await self._request_json_with_retry(client, item_url)
+        if payload is not None:
+            return payload
+
+        # Keep legacy fallback for compatibility with older fixtures/contracts.
+        legacy_item_url = f"{BASE_URL}/items?item_ids={item_id}&detail=true"
+        fallback_payload = await self._request_json_with_retry(client, legacy_item_url)
+        if fallback_payload is None:
             logger.warning("Failed to fetch item details for item_id=%s", item_id)
-        return payload
+        return fallback_payload
 
     def _parse_item(
         self, item: dict[str, object], search_region: str
@@ -312,6 +459,53 @@ class ZigbangCrawler:
         except (TypeError, ValueError, KeyError):
             return None
 
+    def _parse_apt_catalog_item(
+        self, item: dict[str, object], search_region: str
+    ) -> ListingUpsert | None:
+        source_id = _extract_apt_catalog_source_id(item)
+        if not source_id:
+            return None
+
+        tran_type = str(item.get("tranType", "")).strip().lower()
+        rent_type = APT_TRAN_TYPE_MAP.get(tran_type)
+        if rent_type is None:
+            return None
+
+        local1 = str(item.get("local1", "")).strip()
+        local2 = str(item.get("local2", "")).strip()
+        local3 = str(item.get("local3", "")).strip()
+        address = (
+            " ".join(part for part in (local1, local2, local3) if part) or search_region
+        )
+        dong = local3 or search_region
+
+        area_danji_name = str(item.get("areaDanjiName", "")).strip()
+        dong_name = str(item.get("dong", "")).strip()
+        detail_address = (
+            " ".join(part for part in (area_danji_name, dong_name) if part) or None
+        )
+
+        item_title = str(item.get("itemTitle", "")).strip()
+        description = item_title or None
+
+        return ListingUpsert(
+            source="zigbang",
+            source_id=source_id,
+            property_type="apt",
+            rent_type=rent_type,
+            deposit=_to_int(item.get("depositMin"), 0),
+            monthly_rent=_to_int(item.get("rentMin"), 0),
+            address=address,
+            dong=dong,
+            detail_address=detail_address,
+            area_m2=_to_decimal(item.get("sizeM2") or item.get("sizeContractM2")),
+            floor=_to_optional_int(item.get("floor")),
+            total_floors=None,
+            description=description,
+            latitude=None,
+            longitude=None,
+        )
+
     async def run(self) -> CrawlResult[ListingUpsert]:
         """Fetch and parse Zigbang rental listings."""
 
@@ -326,6 +520,8 @@ class ZigbangCrawler:
         source_keys_sample: list[list[str]] = []
         seen_schema_keys: set[tuple[str, ...]] = set()
         seen_source_keys: set[tuple[str, ...]] = set()
+        seen_search_item_ids: set[str] = set()
+        seen_listing_source_ids: set[str] = set()
 
         if not self._region_names:
             logger.warning("No region_names configured - returning empty result")
@@ -343,8 +539,60 @@ class ZigbangCrawler:
         timeout = httpx.Timeout(settings.public_data_request_timeout_seconds)
 
         async with httpx.AsyncClient(timeout=timeout, headers=self._headers) as client:
-            for region_name in self._region_names:
+            for region_idx, region_name in enumerate(self._region_names):
+                region_code: str | None = None
+                if self._region_codes and region_idx < len(self._region_codes):
+                    maybe_code = self._region_codes[region_idx].strip()
+                    if maybe_code:
+                        region_code = maybe_code
+
                 for property_type in self._property_types:
+                    if property_type == "아파트" and region_code:
+                        await asyncio.sleep(self._base_delay_seconds)
+                        apt_results = await self._fetch_apt_item_catalogs(
+                            client, region_code
+                        )
+                        if not apt_results:
+                            continue
+
+                        raw_item_count += len(apt_results)
+
+                        for item in apt_results:
+                            top_level_keys = tuple(sorted(item.keys()))
+                            if (
+                                top_level_keys
+                                and top_level_keys not in seen_schema_keys
+                                and len(schema_keys_sample) < 3
+                            ):
+                                seen_schema_keys.add(top_level_keys)
+                                schema_keys_sample.append(list(top_level_keys))
+
+                            tran_type = str(item.get("tranType", "")).strip().lower()
+                            if tran_type == "trade":
+                                continue
+
+                            row = self._parse_apt_catalog_item(item, region_name)
+                            if row is None:
+                                invalid_count += 1
+                                continue
+
+                            if row.source_id in seen_listing_source_ids:
+                                continue
+
+                            seen_listing_source_ids.add(row.source_id)
+                            all_rows.append(row)
+                            parsed_count += 1
+
+                        logger.info(
+                            "Fetched %s apartment catalog items for region_name=%s, region_code=%s",
+                            len(apt_results),
+                            region_name,
+                            region_code,
+                        )
+                        if all_rows and len(all_rows) % 20 == 0:
+                            await asyncio.sleep(self._base_delay_seconds * 2)
+                        continue
+
                     for rent_type in ["전세", "월세"]:
                         await asyncio.sleep(self._base_delay_seconds)
 
@@ -380,9 +628,47 @@ class ZigbangCrawler:
                                     seen_source_keys.add(source_keys)
                                     source_keys_sample.append(list(source_keys))
 
+                            source_id = _extract_source_id(item)
+                            if source_id:
+                                if source_id in seen_search_item_ids:
+                                    continue
+                                seen_search_item_ids.add(source_id)
+
                             row = self._parse_item(item, region_name)
                             if row:
+                                if row.source_id in seen_listing_source_ids:
+                                    continue
+                                seen_listing_source_ids.add(row.source_id)
                                 all_rows.append(row)
+                                parsed_count += 1
+                                continue
+
+                            if not source_id:
+                                invalid_count += 1
+                                continue
+
+                            detail_payload = await self._fetch_item_details(
+                                client, source_id
+                            )
+                            if detail_payload is None:
+                                invalid_count += 1
+                                continue
+
+                            parsed_detail_row: ListingUpsert | None = None
+                            for detail_item in _extract_detail_listing_candidates(
+                                detail_payload
+                            ):
+                                parsed_detail_row = self._parse_item(
+                                    detail_item, region_name
+                                )
+                                if parsed_detail_row:
+                                    break
+
+                            if parsed_detail_row:
+                                if parsed_detail_row.source_id in seen_listing_source_ids:
+                                    continue
+                                seen_listing_source_ids.add(parsed_detail_row.source_id)
+                                all_rows.append(parsed_detail_row)
                                 parsed_count += 1
                             else:
                                 invalid_count += 1
@@ -395,7 +681,7 @@ class ZigbangCrawler:
                             rent_type,
                         )
 
-                        if len(all_rows) % 20 == 0:
+                        if all_rows and len(all_rows) % 20 == 0:
                             await asyncio.sleep(self._base_delay_seconds * 2)
 
         self.last_run_metrics = {

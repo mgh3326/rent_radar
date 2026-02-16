@@ -661,12 +661,15 @@ async def fetch_listings(
 
         sido_name = parts["sido"]
         sigungu_name = parts["sigungu"]
+        sigungu_compact = sigungu_name.replace(" ", "")
         sigungu_aliases = parts["aliases"]
+        address_compact = func.replace(Listing.address, " ", "")
         stmt = stmt.where(
             and_(
                 Listing.address.ilike(f"%{sido_name}%"),
                 or_(
                     Listing.address.ilike(f"%{sigungu_name}%"),
+                    address_compact.ilike(f"%{sigungu_compact}%"),
                     Listing.dong.in_(sigungu_aliases),
                 ),
             )

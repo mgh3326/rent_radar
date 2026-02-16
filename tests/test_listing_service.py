@@ -81,6 +81,24 @@ async def test_fetch_listings_region_code_for_ambiguous_sigungu_includes_sido_ad
 
 
 @pytest.mark.anyio
+async def test_fetch_listings_region_code_matches_sigungu_even_with_address_whitespace() -> (
+    None
+):
+    session = _mock_session_for_listings()
+
+    await fetch_listings(
+        session,
+        region_code="41135",
+    )
+
+    stmt = session.execute.call_args.args[0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "replace(listings.address, ' ', '')" in compiled
+    assert "%성남시분당구%" in compiled
+
+
+@pytest.mark.anyio
 async def test_fetch_listings_invalid_region_code_returns_empty_without_query() -> None:
     session = _mock_session_for_listings()
 

@@ -52,7 +52,7 @@ async def crawl_zigbang_listings() -> dict[str, object]:
         }
 
     try:
-        crawler = ZigbangCrawler()
+        crawler = ZigbangCrawler(region_codes=list(settings.target_region_codes))
         result = await crawler.run()
         inserted = await _persist_listings(result.rows)
 

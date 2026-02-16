@@ -216,7 +216,11 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
             f"Reset verification failed; expected all zeros, got {pre_crawl_snapshot}"
         )
 
-    crawler = ZigbangCrawler(region_names=region_names, property_types=property_types)
+    crawler = ZigbangCrawler(
+        region_names=region_names,
+        region_codes=[args.region_code],
+        property_types=property_types,
+    )
     try:
         crawl_result = await crawler.run()
     except ZigbangSchemaMismatchError as exc:

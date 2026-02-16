@@ -138,6 +138,7 @@ async def _run(args: CliArgs) -> dict[str, object]:
     region_names = region_codes_to_district_names(region_codes)
     if args.max_regions > 0:
         region_names = region_names[: args.max_regions]
+    selected_region_codes = region_codes[: len(region_names)]
 
     if not region_names:
         failures.append("region_names == 0")
@@ -152,6 +153,7 @@ async def _run(args: CliArgs) -> dict[str, object]:
     if not failures:
         crawler = ZigbangCrawler(
             region_names=region_names,
+            region_codes=selected_region_codes,
             property_types=property_types,
             max_retries=args.max_retries,
             base_delay_seconds=args.base_delay_seconds,
