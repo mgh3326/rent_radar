@@ -99,6 +99,8 @@ Claude Desktop 또는 MCP 클라이언트에서 사용 가능:
 }
 ```
 
+Manual playbook: `docs/playbooks/claude-desktop-mcp-manual-test.md`
+
 ## Scheduled Tasks
 
 - **crawl_zigbang_listings**: 6시간마다 (30 */6)
