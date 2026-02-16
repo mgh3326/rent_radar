@@ -132,6 +132,8 @@ uv run pytest -q
 - `https://apis.zigbang.com/v2/search` can return location/complex metadata (`id/type/name/_source`) instead of listing payloads.
 - The crawler now fails fast when `raw_count > 0` but `parsed_count == 0`.
 - This fail-fast behavior is expected and prevents polluted data (`source_id=""`) from being inserted.
+- Retry targets for transient HTTP errors are `429`, `500`, `502`, `503`, `504` with exponential backoff + jitter, and cooldown on repeated `429`.
+- `base_delay_seconds` is used for both normal request pacing and retry baseline backoff.
 
 ### Zigbang schema fixture (representative sample)
 

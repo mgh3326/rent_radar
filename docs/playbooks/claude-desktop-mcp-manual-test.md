@@ -24,6 +24,12 @@ Expected output:
 - `crawl.count` is non-negative
 - `persistence.upsert_count` is non-negative
 
+Retry policy in this script:
+- Retry targets: `429`, `500`, `502`, `503`, `504`
+- Backoff: exponential + jitter
+- Cooldown: applied on repeated `429`
+- `--base-delay-seconds` affects both normal request cadence and retry backoff baseline
+
 ## Start MCP Server
 
 ```bash
@@ -39,6 +45,7 @@ Use the prompts below in order:
 1. `분당구 아파트 전세 10개만 보여줘`
 2. `정자동으로 좁혀서 보증금 5억~8억만 보여줘`
 3. `같은 조건으로 다시 조회해서 캐시 히트 여부도 알려줘`
+4. `분당구 정자동 아파트 전세, 보증금 5억~8억, 10개만 보여줘`
 
 Manual pass criteria:
 - Tool call completes without server errors
