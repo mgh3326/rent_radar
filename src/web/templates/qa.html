@@ -21,48 +21,11 @@
         <h2>수동 실행</h2>
         <div class="summary-cards">
             <div class="card">
-                <h3>공공데이터 Crawl</h3>
-                <form action="/web/crawl" method="post">
-                    <label for="region_code">지역 코드</label>
-                    <select id="region_code" name="region_code">
-                        {% for sido, districts in sido_sigungu.items() %}
-                            <optgroup label="{{ sido }}">
-                                {% for code, name in districts %}
-                                    <option value="{{ code }}" {% if code == '11110' %}selected{% endif %}>{{ name }}</option>
-                                {% endfor %}
-                            </optgroup>
-                        {% endfor %}
-                    </select>
-
-                    <label for="property_type">매물유형</label>
-                    <select id="property_type" name="property_type">
-                        <option value="apt" selected>아파트</option>
-                        <option value="villa">연립다세대</option>
-                        <option value="officetel">오피스텔</option>
-                    </select>
-
-                    <label for="start_year_month">시작 YYYYMM (선택)</label>
-                    <input id="start_year_month" name="start_year_month" placeholder="202501" value="">
-
-                    <label for="end_year_month">종료 YYYYMM (선택)</label>
-                    <input id="end_year_month" name="end_year_month" placeholder="202503" value="">
-
-                    <label>
-                        <input type="checkbox" name="force" value="true">
-                        dedup 우회(force)
-                    </label>
-                    <button type="submit">공공데이터 수집 실행</button>
-                </form>
-            </div>
-
-            <div class="card">
                 <h3>매물 Crawl</h3>
                 <form action="/web/crawl-listings" method="post">
                     <label for="source">소스</label>
                     <select id="source" name="source">
-                        <option value="all" selected>전체</option>
-                        <option value="naver">네이버</option>
-                        <option value="zigbang">직방</option>
+                        <option value="zigbang" selected>직방</option>
                     </select>
 
                     <label>

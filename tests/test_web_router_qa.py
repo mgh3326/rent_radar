@@ -47,8 +47,8 @@ async def test_web_qa_page_returns_200(
             return {
                 "snapshots": [
                     {
-                        "source": "public_api",
-                        "table_name": "real_trades",
+                        "source": "zigbang",
+                        "table_name": "listings",
                         "total_count": 10,
                         "last_24h_count": 2,
                         "last_updated": "2026-02-13T12:00:00+00:00",
@@ -68,10 +68,40 @@ async def test_web_qa_page_returns_200(
     assert response.status_code == 200
     assert "QA 콘솔" in response.text
     assert "최근 24시간 수집 스냅샷" in response.text
+    assert '/web/crawl"' not in response.text
+    assert "네이버" not in response.text
 
 
 @pytest.mark.anyio
-async def test_web_crawl_force_false_keeps_duplicate_block(
+async def test_web_listings_page_uses_zigbang_source_only(
+    monkeypatch: pytest.MonkeyPatch,
+    web_client: AsyncClient,
+) -> None:
+    async def fake_fetch_listings(*args: object, **kwargs: object) -> list[object]:  # noqa: ARG001
+        return []
+
+    monkeypatch.setattr(web_router_module, "fetch_listings", fake_fetch_listings)
+
+    response = await web_client.get("/web/listings")
+
+    assert response.status_code == 200
+    assert "네이버" not in response.text
+    assert 'value="zigbang" selected' in response.text
+
+
+@pytest.mark.anyio
+async def test_web_crawl_endpoint_removed(web_client: AsyncClient) -> None:
+    response = await web_client.post(
+        "/web/crawl",
+        data={"region_code": "11110", "property_type": "apt", "force": "false"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_web_crawl_listings_force_false_keeps_duplicate_block(
     monkeypatch: pytest.MonkeyPatch,
     web_client: AsyncClient,
 ) -> None:
@@ -84,77 +114,29 @@ async def test_web_crawl_force_false_keeps_duplicate_block(
         if fingerprint in seen:
             return {"enqueued": False, "reason": "duplicate_enqueue"}
         seen.add(fingerprint)
-        return {"enqueued": True, "task_id": "task-1"}
+        return {"enqueued": True, "task_id": "zigbang-1"}
 
-    monkeypatch.setattr(web_router_module, "enqueue_crawl_real_trade", fake_enqueue)
+    monkeypatch.setattr(
+        web_router_module, "enqueue_crawl_zigbang_listings", fake_enqueue
+    )
 
     first = await web_client.post(
-        "/web/crawl",
-        data={"region_code": "11110", "property_type": "apt", "force": "false"},
+        "/web/crawl-listings",
+        data={"source": "zigbang", "force": "false"},
         follow_redirects=False,
     )
     second = await web_client.post(
-        "/web/crawl",
-        data={"region_code": "11110", "property_type": "apt", "force": "false"},
+        "/web/crawl-listings",
+        data={"source": "zigbang", "force": "false"},
         follow_redirects=False,
     )
 
     assert first.status_code == 303
     assert second.status_code == 303
+    assert "source=zigbang" in first.headers["location"]
     assert "crawl_status=enqueued" in first.headers["location"]
     assert "crawl_status=duplicate" in second.headers["location"]
     assert fingerprints == ["manual", "manual"]
-
-
-@pytest.mark.anyio
-async def test_web_crawl_force_true_allows_reenqueue(
-    monkeypatch: pytest.MonkeyPatch,
-    web_client: AsyncClient,
-) -> None:
-    seen: set[str] = set()
-    fingerprints: list[str] = []
-
-    async def fake_enqueue(**kwargs: object) -> dict[str, object]:
-        fingerprint = cast(str, kwargs["fingerprint"])
-        fingerprints.append(fingerprint)
-        if fingerprint in seen:
-            return {"enqueued": False, "reason": "duplicate_enqueue"}
-        seen.add(fingerprint)
-        return {"enqueued": True, "task_id": "task-1"}
-
-    class FakeDateTime:
-        _index: int = 0
-
-        @classmethod
-        def now(cls, _tz: object) -> datetime:
-            value = datetime(2026, 2, 13, 12, 0, 0, tzinfo=UTC) + timedelta(
-                seconds=cls._index
-            )
-            cls._index += 1
-            return value
-
-    monkeypatch.setattr(web_router_module, "enqueue_crawl_real_trade", fake_enqueue)
-    monkeypatch.setattr(web_router_module, "datetime", FakeDateTime)
-
-    first = await web_client.post(
-        "/web/crawl",
-        data={"region_code": "11110", "property_type": "apt", "force": "true"},
-        follow_redirects=False,
-    )
-    second = await web_client.post(
-        "/web/crawl",
-        data={"region_code": "11110", "property_type": "apt", "force": "true"},
-        follow_redirects=False,
-    )
-
-    assert first.status_code == 303
-    assert second.status_code == 303
-    assert "crawl_status=enqueued" in first.headers["location"]
-    assert "crawl_status=enqueued" in second.headers["location"]
-    assert len(fingerprints) == 2
-    assert fingerprints[0].startswith("force-")
-    assert fingerprints[1].startswith("force-")
-    assert fingerprints[0] != fingerprints[1]
 
 
 @pytest.mark.anyio
@@ -165,13 +147,13 @@ async def test_web_crawl_listings_force_true_allows_reenqueue(
     seen: set[str] = set()
     fingerprints: list[str] = []
 
-    async def fake_enqueue_naver(**kwargs: object) -> dict[str, object]:
+    async def fake_enqueue(**kwargs: object) -> dict[str, object]:
         fingerprint = cast(str, kwargs["fingerprint"])
         fingerprints.append(fingerprint)
         if fingerprint in seen:
             return {"enqueued": False, "reason": "duplicate_enqueue"}
         seen.add(fingerprint)
-        return {"enqueued": True, "task_id": "naver-1"}
+        return {"enqueued": True, "task_id": "zigbang-1"}
 
     class FakeDateTime:
         _index: int = 0
@@ -185,16 +167,7 @@ async def test_web_crawl_listings_force_true_allows_reenqueue(
             return value
 
     monkeypatch.setattr(
-        web_router_module, "enqueue_crawl_naver_listings", fake_enqueue_naver
-    )
-
-    async def fake_enqueue_zigbang(**_kwargs: object) -> dict[str, object]:
-        return {"enqueued": False, "reason": "not_called"}
-
-    monkeypatch.setattr(
-        web_router_module,
-        "enqueue_crawl_zigbang_listings",
-        fake_enqueue_zigbang,
+        web_router_module, "enqueue_crawl_zigbang_listings", fake_enqueue
     )
     monkeypatch.setattr(web_router_module, "datetime", FakeDateTime)
 
@@ -205,13 +178,17 @@ async def test_web_crawl_listings_force_true_allows_reenqueue(
     )
     second = await web_client.post(
         "/web/crawl-listings",
-        data={"source": "naver", "force": "true"},
+        data={"source": "all", "force": "true"},
         follow_redirects=False,
     )
 
     assert first.status_code == 303
     assert second.status_code == 303
+    assert "source=zigbang" in first.headers["location"]
+    assert "source=zigbang" in second.headers["location"]
     assert "crawl_status=enqueued" in first.headers["location"]
     assert "crawl_status=enqueued" in second.headers["location"]
     assert len(fingerprints) == 2
+    assert fingerprints[0].startswith("force-")
+    assert fingerprints[1].startswith("force-")
     assert fingerprints[0] != fingerprints[1]

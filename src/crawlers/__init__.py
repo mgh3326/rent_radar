@@ -1,6 +1,6 @@
 """Crawler implementations."""
 
 from src.crawlers.base import CrawlResult
-from src.crawlers.public_api import PublicApiCrawler
+from src.crawlers.zigbang import ZigbangCrawler
 
-__all__ = ["CrawlResult", "PublicApiCrawler"]
+__all__ = ["CrawlResult", "ZigbangCrawler"]

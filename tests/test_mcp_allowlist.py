@@ -11,10 +11,6 @@ from src.mcp_server.server import create_mcp_server
 
 ALL_TOOL_NAMES = {
     "add_favorite",
-    "check_jeonse_safety",
-    "compare_listings",
-    "get_price_trend",
-    "get_real_price",
     "list_favorites",
     "list_regions",
     "manage_favorites",
@@ -51,7 +47,7 @@ async def test_allowlist_off_registers_all_tools(
     tool_names = await _list_tool_names(mcp_server)
 
     assert tool_names == ALL_TOOL_NAMES
-    assert len(tool_names) == 11
+    assert len(tool_names) == 7
 
 
 @pytest.mark.anyio
