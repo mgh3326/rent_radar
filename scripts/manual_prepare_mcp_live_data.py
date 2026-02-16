@@ -118,11 +118,22 @@ def _split_csv(raw_value: str) -> list[str]:
 
 async def _run(args: CliArgs) -> dict[str, object]:
     failures: list[str] = []
+    warnings: list[str] = []
 
     region_codes = _split_csv(args.region_codes)
     property_types = _split_csv(args.property_types)
     if args.max_regions <= 0:
         failures.append("max_regions <= 0")
+    if args.max_retries < 0:
+        failures.append("max_retries < 0")
+    if args.base_delay_seconds < 0:
+        failures.append("base_delay_seconds < 0")
+    if args.max_backoff_seconds < args.base_delay_seconds:
+        failures.append("max_backoff_seconds < base_delay_seconds")
+    if args.cooldown_seconds < 0:
+        failures.append("cooldown_seconds < 0")
+    if args.cooldown_threshold <= 0:
+        failures.append("cooldown_threshold <= 0")
 
     region_names = region_codes_to_district_names(region_codes)
     if args.max_regions > 0:
@@ -152,6 +163,8 @@ async def _run(args: CliArgs) -> dict[str, object]:
         crawl_count = crawl_result.count
         crawl_errors = list(crawl_result.errors)
         crawl_metrics = dict(crawler.last_run_metrics)
+        if crawl_errors:
+            warnings.append("crawl_errors_present")
 
         async with session_context() as session:
             upsert_count = await upsert_listings(session, crawl_result.rows)
@@ -185,6 +198,7 @@ async def _run(args: CliArgs) -> dict[str, object]:
         "persistence": {
             "upsert_count": upsert_count,
         },
+        "warnings": warnings,
         "failures": failures,
     }
     return report

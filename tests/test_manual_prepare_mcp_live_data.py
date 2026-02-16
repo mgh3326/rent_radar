@@ -135,3 +135,80 @@ async def test_run_reports_failure_when_no_rows_persisted(
 
     assert report["status"] == "failure"
     assert "upsert_count <= 0" in cast(list[object], report["failures"])
+
+
+@pytest.mark.anyio
+async def test_run_reports_failure_on_invalid_backoff_range() -> None:
+    args = live_data.CliArgs(
+        region_codes="41135",
+        property_types="아파트",
+        max_regions=1,
+        base_delay_seconds=2.0,
+        max_backoff_seconds=1.0,
+    )
+
+    report = await live_data._run(args)
+
+    assert report["status"] == "failure"
+    assert "max_backoff_seconds < base_delay_seconds" in cast(
+        list[object], report["failures"]
+    )
+
+
+@pytest.mark.anyio
+async def test_run_reports_success_with_warnings_when_crawl_has_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = live_data.CliArgs(
+        region_codes="41135",
+        property_types="아파트",
+        max_regions=1,
+    )
+
+    @asynccontextmanager
+    async def fake_session_context():
+        yield object()
+
+    class FakeCrawler:
+        def __init__(
+            self,
+            *,
+            region_names: list[str],
+            property_types: list[str],
+            **_kwargs: object,
+        ) -> None:
+            assert region_names == ["성남시분당구"]
+            assert property_types == ["아파트"]
+            self.last_run_metrics: dict[str, object] = {"retry_count": 0}
+
+        async def run(self) -> CrawlResult[object]:
+            return CrawlResult(
+                count=1,
+                rows=[object()],
+                errors=["partial source mismatch"],
+            )
+
+    async def fake_upsert_listings(_session: object, _rows: list[object]) -> int:
+        return 1
+
+    monkeypatch.setattr(
+        "scripts.manual_prepare_mcp_live_data.region_codes_to_district_names",
+        lambda _codes: ["성남시분당구"],
+    )
+    monkeypatch.setattr(
+        "scripts.manual_prepare_mcp_live_data.ZigbangCrawler",
+        FakeCrawler,
+    )
+    monkeypatch.setattr(
+        "scripts.manual_prepare_mcp_live_data.session_context",
+        fake_session_context,
+    )
+    monkeypatch.setattr(
+        "scripts.manual_prepare_mcp_live_data.upsert_listings",
+        fake_upsert_listings,
+    )
+
+    report = await live_data._run(args)
+
+    assert report["status"] == "success"
+    assert "crawl_errors_present" in cast(list[object], report["warnings"])
