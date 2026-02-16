@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import random
 from decimal import Decimal, InvalidOperation
 from typing import Final
 
@@ -27,6 +28,8 @@ DEFAULT_BASE_DELAY_SECONDS: Final = 1.0
 DEFAULT_MAX_BACKOFF_SECONDS: Final = 12.0
 DEFAULT_COOLDOWN_SECONDS: Final = 20.0
 DEFAULT_COOLDOWN_THRESHOLD: Final = 3
+DEFAULT_JITTER_RATIO: Final = 0.2
+RETRYABLE_HTTP_STATUS_CODES: Final = frozenset({429, 500, 502, 503, 504})
 
 
 class ZigbangSchemaMismatchError(RuntimeError):
@@ -105,6 +108,7 @@ class ZigbangCrawler:
         self._max_backoff_seconds = max(self._base_delay_seconds, max_backoff_seconds)
         self._cooldown_seconds = max(0.0, cooldown_seconds)
         self._cooldown_threshold = max(1, cooldown_threshold)
+        self._jitter_ratio = max(0.0, DEFAULT_JITTER_RATIO)
         self._retry_count = 0
         self._cooldown_count = 0
 
@@ -196,17 +200,25 @@ class ZigbangCrawler:
 
             except httpx.HTTPStatusError as e:
                 status_code = e.response.status_code
-                if status_code != 429:
+                if status_code not in RETRYABLE_HTTP_STATUS_CODES:
                     logger.warning("HTTP %s error for url=%s", status_code, url)
                     return None
 
                 self._retry_count += 1
                 self.last_run_metrics["retry_count"] = self._retry_count
-                consecutive_429 += 1
 
                 if attempt >= self._max_retries:
-                    logger.warning("HTTP 429 retry exhausted for url=%s", url)
+                    logger.warning(
+                        "HTTP %s retry exhausted for url=%s",
+                        status_code,
+                        url,
+                    )
                     return None
+
+                if status_code == 429:
+                    consecutive_429 += 1
+                else:
+                    consecutive_429 = 0
 
                 backoff_seconds = min(
                     self._base_delay_seconds * (2**attempt),
@@ -219,7 +231,7 @@ class ZigbangCrawler:
                     await asyncio.sleep(self._cooldown_seconds)
                     consecutive_429 = 0
 
-                await asyncio.sleep(backoff_seconds)
+                await asyncio.sleep(self._apply_jitter(backoff_seconds))
 
             except Exception as e:
                 error_msg = f"Unexpected error for url={url}: {str(e)}"
@@ -227,6 +239,13 @@ class ZigbangCrawler:
                 return None
 
         return None
+
+    def _apply_jitter(self, base_seconds: float) -> float:
+        if base_seconds <= 0:
+            return 0.0
+        ratio = random.uniform(-self._jitter_ratio, self._jitter_ratio)
+        jittered = base_seconds * (1 + ratio)
+        return max(0.0, jittered)
 
     async def _fetch_item_details(
         self,
