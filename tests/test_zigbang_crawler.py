@@ -249,3 +249,130 @@ async def test_search_stops_after_max_retries_on_429(
     retry_count = crawler.last_run_metrics["retry_count"]
     assert isinstance(retry_count, int)
     assert retry_count > 0
+
+
+async def test_search_retries_on_500_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    crawler = ZigbangCrawler(region_names=["종로구"], property_types=["아파트"])
+    attempts = 0
+
+    async def fake_sleep(_seconds: float) -> None:
+        return None
+
+    async def fake_get(
+        _self: httpx.AsyncClient,
+        url: str,
+        **_kwargs: object,
+    ) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        request = httpx.Request("GET", url)
+        if attempts == 1:
+            return httpx.Response(
+                500,
+                request=request,
+                json={"code": "500", "message": "Internal server error"},
+            )
+
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "code": "200",
+                "items": [{"id": 1234, "type": "apartment", "name": "sample"}],
+            },
+        )
+
+    monkeypatch.setattr("src.crawlers.zigbang.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+
+    async with httpx.AsyncClient() as client:
+        rows = await crawler._search_by_region_name(client, "종로구", "아파트", "전세")
+
+    assert attempts == 2
+    assert rows
+
+
+async def test_search_does_not_retry_on_404(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    crawler = ZigbangCrawler(region_names=["종로구"], property_types=["아파트"])
+    attempts = 0
+
+    async def fake_sleep(_seconds: float) -> None:
+        return None
+
+    async def fake_get(
+        _self: httpx.AsyncClient,
+        url: str,
+        **_kwargs: object,
+    ) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        request = httpx.Request("GET", url)
+        return httpx.Response(
+            404,
+            request=request,
+            json={"code": "404", "message": "Not found"},
+        )
+
+    monkeypatch.setattr("src.crawlers.zigbang.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+
+    async with httpx.AsyncClient() as client:
+        rows = await crawler._search_by_region_name(client, "종로구", "아파트", "전세")
+
+    assert attempts == 1
+    assert rows == []
+
+
+async def test_retry_backoff_applies_jitter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    crawler = ZigbangCrawler(
+        region_names=["종로구"],
+        property_types=["아파트"],
+        max_retries=1,
+        base_delay_seconds=1.0,
+        max_backoff_seconds=12.0,
+    )
+    sleep_calls: list[float] = []
+    attempts = 0
+
+    async def fake_sleep(seconds: float) -> None:
+        sleep_calls.append(seconds)
+
+    async def fake_get(
+        _self: httpx.AsyncClient,
+        url: str,
+        **_kwargs: object,
+    ) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        request = httpx.Request("GET", url)
+        if attempts == 1:
+            return httpx.Response(
+                429,
+                request=request,
+                json={"code": "429", "message": "Too many requests"},
+            )
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "code": "200",
+                "items": [{"id": 1, "type": "apartment", "name": "sample"}],
+            },
+        )
+
+    monkeypatch.setattr("src.crawlers.zigbang.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("random.uniform", lambda _low, _high: 0.1)
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+
+    async with httpx.AsyncClient() as client:
+        rows = await crawler._search_by_region_name(client, "종로구", "아파트", "전세")
+
+    assert rows
+    assert attempts == 2
+    assert sleep_calls == [1.1]
