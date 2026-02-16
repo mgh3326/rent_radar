@@ -46,7 +46,6 @@
         <div>
             <label>소스:</label>
             <select name="source">
-                <option value="naver" {% if filters.source == 'naver' %}selected{% endif %}>네이버</option>
                 <option value="zigbang" {% if filters.source == 'zigbang' %}selected{% endif %}>직방</option>
             </select>
         </div>
@@ -113,7 +112,7 @@
             <p class="no-results-text">검색 결과가 없습니다.</p>
             <p class="no-results-hint">아직 매물 데이터가 수집되지 않았거나, 검색 조건에 맞는 매물이 없습니다.</p>
             <form action="/web/crawl-listings" method="post" class="no-results-actions">
-                <input type="hidden" name="source" value="{{ filters.source }}">
+                <input type="hidden" name="source" value="zigbang">
                 <button type="submit" class="primary">매물 수집 시작</button>
             </form>
         </div>

@@ -11,11 +11,8 @@ from src.config.region_codes import SIDO_SIGUNGU
 from src.db.repositories import (
     fetch_favorites,
     fetch_listings,
-    fetch_price_changes,
-    fetch_real_trade_summary,
 )
 from src.db.session import get_db_session
-from src.services import PriceService
 from src.services.qa_service import QAService
 from src.taskiq_app.tasks import enqueue_crawl_zigbang_listings
 
@@ -33,36 +30,12 @@ async def dashboard(
     property_type: str = "apt",
     crawl_status: str = "",
 ) -> HTMLResponse:
-    """Render dashboard with summary, list, and trend tables."""
-
-    summary = await fetch_real_trade_summary(session)
-
-    price_service = PriceService(session)
-
-    dong_filter = dong if dong else None
-    region_code_filter = region_code if region_code else None
-    property_type_filter = property_type if property_type else "apt"
-
-    real_prices = await price_service.get_real_price(
-        region_code=region_code_filter,
-        dong=dong_filter,
-        property_type=property_type_filter,
-        period_months=24,
-    )
-    price_trend = await price_service.get_price_trend(
-        region_code=region_code_filter,
-        dong=dong_filter,
-        property_type=property_type_filter,
-        period_months=24,
-    )
+    _ = session
 
     return templates.TemplateResponse(
         "dashboard.html",
         {
             "request": request,
-            "summary": summary,
-            "real_prices": real_prices,
-            "price_trend": price_trend,
             "filters": {
                 "region_code": region_code,
                 "dong": dong,
@@ -100,14 +73,15 @@ async def listings(
     dong: str = "",
     property_type: str = "",
     rent_type: str = "",
-    source: str = "",
+    source: str = "zigbang",
     crawl_status: str = "",
 ) -> HTMLResponse:
     dong_filter = dong if dong else None
     region_code_filter = region_code if region_code else None
     property_type_filter = property_type if property_type else None
     rent_type_filter = rent_type if rent_type else None
-    source_filter = source if source else None
+    source = "zigbang" if source != "zigbang" else source
+    source_filter = source
 
     listings = await fetch_listings(
         session,
@@ -178,40 +152,6 @@ async def toggle_favorite(
 
     referer = request.headers.get("referer", "/web/favorites")
     return RedirectResponse(url=referer, status_code=303)
-
-
-@router.get("/price-changes", response_class=HTMLResponse)
-async def price_changes(
-    request: Request,
-    session: AsyncSession = Depends(get_db_session),
-    dong: str = "",
-    property_type: str = "",
-    days: int = 30,
-) -> HTMLResponse:
-    """Render price change charts."""
-    dong_filter = dong if dong else None
-    property_type_filter = property_type if property_type else None
-
-    price_changes = await fetch_price_changes(
-        session,
-        dong=dong_filter,
-        property_type=property_type_filter,
-        limit=days,
-    )
-
-    return templates.TemplateResponse(
-        "price_changes.html",
-        {
-            "request": request,
-            "price_changes": price_changes,
-            "filters": {
-                "dong": dong,
-                "property_type": property_type,
-                "days": days,
-            },
-            "sido_sigungu": SIDO_SIGUNGU,
-        },
-    )
 
 
 @router.get("/qa", response_class=HTMLResponse)

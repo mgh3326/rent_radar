@@ -131,12 +131,11 @@
 <body>
     <header>
         <h1>🏠 Rent Radar</h1>
-        <p>공공주택 실거래가 데이터 대시보드</p>
+        <p>직방 매물 기반 임대 분석 대시보드</p>
         <nav class="top-nav">
             <a href="/web/" class="{% if request.url.path == '/web/' %}active{% endif %}">요약</a>
             <a href="/web/listings" class="{% if request.url.path == '/web/listings' %}active{% endif %}">매물 목록</a>
             <a href="/web/favorites" class="{% if request.url.path == '/web/favorites' %}active{% endif %}">관심 매물</a>
-            <a href="/web/price-changes" class="{% if request.url.path == '/web/price-changes' %}active{% endif %}">가격 변동</a>
             <a href="/web/qa" class="{% if request.url.path == '/web/qa' %}active{% endif %}">QA 콘솔</a>
         </nav>
     </header>
@@ -147,7 +146,7 @@
 
     <footer>
         <p style="text-align: center; color: #666; margin-top: 50px;">
-            © 2026 Rent Radar | MOLIT 공공데이터포털 API 기반
+            © 2026 Rent Radar | Zigbang listing intelligence
         </p>
     </footer>
 </body>

@@ -68,6 +68,25 @@ async def test_web_qa_page_returns_200(
     assert response.status_code == 200
     assert "QA 콘솔" in response.text
     assert "최근 24시간 수집 스냅샷" in response.text
+    assert '/web/crawl"' not in response.text
+    assert "네이버" not in response.text
+
+
+@pytest.mark.anyio
+async def test_web_listings_page_uses_zigbang_source_only(
+    monkeypatch: pytest.MonkeyPatch,
+    web_client: AsyncClient,
+) -> None:
+    async def fake_fetch_listings(*args: object, **kwargs: object) -> list[object]:  # noqa: ARG001
+        return []
+
+    monkeypatch.setattr(web_router_module, "fetch_listings", fake_fetch_listings)
+
+    response = await web_client.get("/web/listings")
+
+    assert response.status_code == 200
+    assert "네이버" not in response.text
+    assert 'value="zigbang" selected' in response.text
 
 
 @pytest.mark.anyio
