@@ -5,25 +5,19 @@ from collections.abc import Callable
 from mcp.server.fastmcp import FastMCP
 
 from src.config import get_settings
-from src.mcp_server.tools.price import register_price_tools
 from src.mcp_server.tools.listing import register_listing_tools
-from src.mcp_server.tools.safety import register_safety_tools
 from src.mcp_server.tools.favorite import register_favorite_tools
-from src.mcp_server.tools.comparison import register_comparison_tools
 from src.mcp_server.tools.region import register_region_tools
 
 ToolRegistrar = Callable[[FastMCP], None]
 ToolRegistration = tuple[ToolRegistrar, tuple[str, ...]]
 
 TOOL_REGISTRATIONS: tuple[ToolRegistration, ...] = (
-    (register_price_tools, ("get_real_price", "get_price_trend")),
     (register_listing_tools, ("search_rent",)),
-    (register_safety_tools, ("check_jeonse_safety",)),
     (
         register_favorite_tools,
         ("add_favorite", "list_favorites", "remove_favorite", "manage_favorites"),
     ),
-    (register_comparison_tools, ("compare_listings",)),
     (register_region_tools, ("list_regions", "search_regions")),
 )
 
