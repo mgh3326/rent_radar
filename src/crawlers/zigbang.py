@@ -22,6 +22,11 @@ PROPERTY_TYPE_MAP: Final = {
     "오피스텔": "officetel",
 }
 BASE_URL: Final = "https://apis.zigbang.com/v2"
+DEFAULT_MAX_RETRIES: Final = 4
+DEFAULT_BASE_DELAY_SECONDS: Final = 1.0
+DEFAULT_MAX_BACKOFF_SECONDS: Final = 12.0
+DEFAULT_COOLDOWN_SECONDS: Final = 20.0
+DEFAULT_COOLDOWN_THRESHOLD: Final = 3
 
 
 class ZigbangSchemaMismatchError(RuntimeError):
@@ -85,11 +90,23 @@ class ZigbangCrawler:
         region_names: list[str] | None = None,
         property_types: list[str] | None = None,
         radius_km: int = 5,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        base_delay_seconds: float = DEFAULT_BASE_DELAY_SECONDS,
+        max_backoff_seconds: float = DEFAULT_MAX_BACKOFF_SECONDS,
+        cooldown_seconds: float = DEFAULT_COOLDOWN_SECONDS,
+        cooldown_threshold: int = DEFAULT_COOLDOWN_THRESHOLD,
     ) -> None:
         self._region_names = region_names or region_codes_to_district_names(
             settings.target_region_codes
         )
         self._property_types = property_types or ["아파트", "빌라/연립", "오피스텔"]
+        self._max_retries = max(0, max_retries)
+        self._base_delay_seconds = max(0.0, base_delay_seconds)
+        self._max_backoff_seconds = max(self._base_delay_seconds, max_backoff_seconds)
+        self._cooldown_seconds = max(0.0, cooldown_seconds)
+        self._cooldown_threshold = max(1, cooldown_threshold)
+        self._retry_count = 0
+        self._cooldown_count = 0
 
         self._headers = {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -104,6 +121,8 @@ class ZigbangCrawler:
             "raw_count": 0,
             "parsed_count": 0,
             "invalid_count": 0,
+            "retry_count": 0,
+            "cooldown_count": 0,
             "schema_keys_sample": [],
             "source_keys_sample": [],
         }
@@ -137,43 +156,77 @@ class ZigbangCrawler:
 
         search_url = f"{BASE_URL}/search?q={region_name}&typeCode={property_type_code}&salesTypeCode={rent_type_code}"
 
-        try:
-            response = await client.get(search_url, headers=self._headers)
-            _ = response.raise_for_status()
-            payload = response.json()
-            if not isinstance(payload, dict):
-                logger.warning(
-                    "Search returned non-dict payload for region_name=%s",
-                    region_name,
+        payload = await self._request_json_with_retry(client, search_url)
+        if not payload:
+            return []
+
+        if payload.get("code") == "200":
+            items = payload.get("items")
+            if not isinstance(items, list):
+                return []
+            normalized_items: list[dict[str, object]] = []
+            for item in items:
+                if isinstance(item, dict):
+                    normalized_items.append(
+                        {str(key): value for key, value in item.items()}
+                    )
+            return normalized_items
+
+        error_msg = f"Search failed for region_name={region_name}: {payload.get('message', 'Unknown error')}"
+        logger.warning(error_msg)
+        return []
+
+    async def _request_json_with_retry(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+    ) -> dict[str, object] | None:
+        consecutive_429 = 0
+        total_attempts = self._max_retries + 1
+
+        for attempt in range(total_attempts):
+            try:
+                response = await client.get(url, headers=self._headers)
+                _ = response.raise_for_status()
+                payload = response.json()
+                if isinstance(payload, dict):
+                    return {str(key): value for key, value in payload.items()}
+                logger.warning("Request returned non-dict payload for url=%s", url)
+                return None
+
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
+                if status_code != 429:
+                    logger.warning("HTTP %s error for url=%s", status_code, url)
+                    return None
+
+                self._retry_count += 1
+                self.last_run_metrics["retry_count"] = self._retry_count
+                consecutive_429 += 1
+
+                if attempt >= self._max_retries:
+                    logger.warning("HTTP 429 retry exhausted for url=%s", url)
+                    return None
+
+                backoff_seconds = min(
+                    self._base_delay_seconds * (2**attempt),
+                    self._max_backoff_seconds,
                 )
-                return []
 
-            if payload.get("code") == "200":
-                items = payload.get("items")
-                if not isinstance(items, list):
-                    return []
-                normalized_items: list[dict[str, object]] = []
-                for item in items:
-                    if isinstance(item, dict):
-                        normalized_items.append(
-                            {str(key): value for key, value in item.items()}
-                        )
-                return normalized_items
-            else:
-                error_msg = f"Search failed for region_name={region_name}: {payload.get('message', 'Unknown error')}"
+                if consecutive_429 >= self._cooldown_threshold:
+                    self._cooldown_count += 1
+                    self.last_run_metrics["cooldown_count"] = self._cooldown_count
+                    await asyncio.sleep(self._cooldown_seconds)
+                    consecutive_429 = 0
+
+                await asyncio.sleep(backoff_seconds)
+
+            except Exception as e:
+                error_msg = f"Unexpected error for url={url}: {str(e)}"
                 logger.warning(error_msg)
-                return []
+                return None
 
-        except httpx.HTTPStatusError as e:
-            error_msg = (
-                f"HTTP {e.response.status_code} error for region_name={region_name}"
-            )
-            logger.warning(error_msg)
-            return []
-        except Exception as e:
-            error_msg = f"Unexpected error for region_name={region_name}: {str(e)}"
-            logger.warning(error_msg)
-            return []
+        return None
 
     async def _fetch_item_details(
         self,
@@ -183,24 +236,10 @@ class ZigbangCrawler:
         """Fetch detailed item information using Zigbang API."""
 
         items_url = f"{BASE_URL}/items?item_ids={item_id}&detail=true"
-
-        try:
-            response = await client.get(items_url, headers=self._headers)
-            _ = response.raise_for_status()
-            payload = response.json()
-            if isinstance(payload, dict):
-                return {str(key): value for key, value in payload.items()}
-            return None
-        except httpx.HTTPStatusError as e:
-            error_msg = (
-                f"HTTP {e.response.status_code} error fetching item_id={item_id}"
-            )
-            logger.warning(error_msg)
-            return None
-        except Exception as e:
-            error_msg = f"Unexpected error fetching item_id={item_id}: {str(e)}"
-            logger.warning(error_msg)
-            return None
+        payload = await self._request_json_with_retry(client, items_url)
+        if payload is None:
+            logger.warning("Failed to fetch item details for item_id=%s", item_id)
+        return payload
 
     def _parse_item(
         self, item: dict[str, object], search_region: str
@@ -262,6 +301,8 @@ class ZigbangCrawler:
         raw_item_count = 0
         parsed_count = 0
         invalid_count = 0
+        self._retry_count = 0
+        self._cooldown_count = 0
         schema_keys_sample: list[list[str]] = []
         source_keys_sample: list[list[str]] = []
         seen_schema_keys: set[tuple[str, ...]] = set()
@@ -273,6 +314,8 @@ class ZigbangCrawler:
                 "raw_count": 0,
                 "parsed_count": 0,
                 "invalid_count": 0,
+                "retry_count": 0,
+                "cooldown_count": 0,
                 "schema_keys_sample": [],
                 "source_keys_sample": [],
             }
@@ -340,6 +383,8 @@ class ZigbangCrawler:
             "raw_count": raw_item_count,
             "parsed_count": parsed_count,
             "invalid_count": invalid_count,
+            "retry_count": self._retry_count,
+            "cooldown_count": self._cooldown_count,
             "schema_keys_sample": schema_keys_sample,
             "source_keys_sample": source_keys_sample,
         }

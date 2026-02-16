@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 
 from src.crawlers.zigbang import ZigbangCrawler, ZigbangSchemaMismatchError
@@ -170,3 +171,81 @@ async def test_parse_item_maps_valid_listing_fixture(
     assert result.deposit == 25000
     assert result.monthly_rent == 80
     assert result.dong == "종로구"
+
+
+async def test_search_retries_on_429_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    crawler = ZigbangCrawler(region_names=["종로구"], property_types=["아파트"])
+    attempts = 0
+
+    async def fake_sleep(_seconds: float) -> None:
+        return None
+
+    async def fake_get(
+        _self: httpx.AsyncClient,
+        url: str,
+        **_kwargs: object,
+    ) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        request = httpx.Request("GET", url)
+
+        if attempts < 3:
+            return httpx.Response(
+                429,
+                request=request,
+                json={"code": "429", "message": "Too many requests"},
+            )
+
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "code": "200",
+                "items": [{"id": 123, "type": "apartment", "name": "sample"}],
+            },
+        )
+
+    monkeypatch.setattr("src.crawlers.zigbang.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+
+    async with httpx.AsyncClient() as client:
+        rows = await crawler._search_by_region_name(client, "종로구", "아파트", "전세")
+
+    assert attempts == 3
+    assert rows
+
+
+async def test_search_stops_after_max_retries_on_429(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    crawler = ZigbangCrawler(region_names=["종로구"], property_types=["아파트"])
+
+    async def fake_sleep(_seconds: float) -> None:
+        return None
+
+    async def fake_get(
+        _self: httpx.AsyncClient,
+        url: str,
+        **_kwargs: object,
+    ) -> httpx.Response:
+        request = httpx.Request("GET", url)
+        return httpx.Response(
+            429,
+            request=request,
+            json={"code": "429", "message": "Too many requests"},
+        )
+
+    monkeypatch.setattr("src.crawlers.zigbang.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+
+    async with httpx.AsyncClient() as client:
+        result = await crawler._search_by_region_name(
+            client, "종로구", "아파트", "전세"
+        )
+
+    assert result == []
+    retry_count = crawler.last_run_metrics["retry_count"]
+    assert isinstance(retry_count, int)
+    assert retry_count > 0
