@@ -30,6 +30,29 @@ Retry policy in this script:
 - Cooldown: applied on repeated `429`
 - `--base-delay-seconds` affects both normal request cadence and retry backoff baseline
 
+## Stage 5 Live Smoke (Local Manual)
+
+Run dedicated task-path smoke:
+
+```bash
+uv run python scripts/smoke_zigbang_live_crawl.py --fingerprint stage5-smoke-20260216
+```
+
+Success contract:
+- JSON only
+- `result=success`
+- `status` is `ok` or `schema_mismatch`
+
+Failure interpretation:
+- `status=skipped_duplicate_execution` with `result=failure`: execution dedup lock blocked this run
+- `status=unexpected_exception`: runtime failure in crawl task path
+- `status=unknown` (or other unmapped status) with `result=failure`: status contract drift
+
+Action hints:
+- `schema_mismatch`: fail-fast is working; inspect crawler schema keys and parser contract before retry
+- `skipped_duplicate_execution`: rerun after dedup TTL or use `--allow-duplicate-run` when lock collision is acceptable
+- `unexpected_exception`: inspect traceback/logs and fix root cause before retry
+
 ## Start MCP Server
 
 ```bash

@@ -61,11 +61,15 @@ Last Updated: 2026-02-16
 - [x] Add seed/e2e evidence entries in Execution Log
   - Evidence: Stage 4 dated rows added under `Execution Log`.
 
-## Stage 5 (Pending) - Zigbang Live Smoke & Runbook
-- [ ] Add `crawl_zigbang_listings` live smoke (`ok` or `schema_mismatch` contract)
-- [ ] Re-verify blank `source_id` fail-fast before upsert
-- [ ] Document Zigbang operation runbook (failure interpretation + action)
-- [ ] Add dated live evidence entries
+## Stage 5 (Completed) - Zigbang Live Smoke & Runbook
+- [x] Add `crawl_zigbang_listings` live smoke (`ok` or `schema_mismatch` contract)
+  - Evidence: `uv run python scripts/smoke_zigbang_live_crawl.py --fingerprint stage5-smoke-20260216` -> `result=success`, `status=ok`.
+- [x] Re-verify blank `source_id` fail-fast before upsert
+  - Evidence: `uv run pytest tests/test_tasks.py::test_crawl_zigbang_schema_mismatch_fails_before_upsert -q` -> `1 passed`, `uv run pytest tests/test_zigbang_crawler.py -q` -> `15 passed`.
+- [x] Document Zigbang operation runbook (failure interpretation + action)
+  - Evidence: `docs/playbooks/claude-desktop-mcp-manual-test.md` adds `Stage 5 Live Smoke (Local Manual)` with success/failure interpretation and action hints.
+- [x] Add dated live evidence entries
+  - Evidence: Stage 5 dated row added under `Execution Log`.
 
 ## Stage 6 (TODO) - Naver Crawl & 429 Hardening (Deferred)
 - [ ] Implement 429 policy (`Retry-After` first, fallback to exponential backoff + jitter)
@@ -92,6 +96,7 @@ Last Updated: 2026-02-16
 |---|---|---|
 | 2026-02-16 | Archive baseline before hard delete | Archive branch: `archive/pre-zigbang-hard-delete-2026-02-16`, Archive tag: `archive-zigbang-hard-delete-base-2026-02-16` |
 | 2026-02-16 | Zigbang-only hard-delete verification | `uv run ruff check src tests scripts` -> `All checks passed`, retained suite `42 passed`, `uv run python scripts/e2e_zigbang_mcp_tool_suite.py --cleanup-scope source_only --mcp-limit 3` -> `status=success` |
+| 2026-02-16 | Stage 5 zigbang live smoke and verification refresh | `uv run python scripts/smoke_zigbang_live_crawl.py --fingerprint stage5-smoke-20260216` -> `result=success`, `status=ok`; `uv run pytest tests/test_smoke_zigbang_live_crawl.py tests/test_tasks.py tests/test_zigbang_crawler.py -q` -> `24 passed`; `uv run ruff check scripts/smoke_zigbang_live_crawl.py tests/test_smoke_zigbang_live_crawl.py tests/test_tasks.py` -> `All checks passed` |
 | 2026-02-15 | Stage 2 baseline verification | `test_mcp_search_rent.py: 6 passed`, `e2e_mcp_search_rent_check.py: status=success` |
 | 2026-02-15 | Stage 3 MCP allowlist | `test_mcp_allowlist.py: 5 passed`, `test_mcp_search_rent.py: 6 passed`, docs/env/checklist updated |
 | 2026-02-15 | Stage 3 final verification refresh | `uv run pytest tests/test_mcp_allowlist.py -q: 7 passed`, `uv run pytest tests/test_mcp_search_rent.py -q: 6 passed`, `uv run ruff check ...: All checks passed` |
