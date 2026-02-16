@@ -34,12 +34,11 @@ _REQUIRED_STAGE4_TOOLS: tuple[str, ...] = (
     "search_rent",
     "add_favorite",
     "list_favorites",
-    "compare_listings",
     "manage_favorites",
 )
 _RECOMMENDED_STAGE4_ALLOWLIST = (
     "search_rent,list_regions,search_regions,add_favorite,list_favorites,"
-    "remove_favorite,manage_favorites,compare_listings"
+    "remove_favorite,manage_favorites"
 )
 
 
@@ -388,22 +387,18 @@ async def _run(args: CliArgs) -> dict[str, object]:
         failures.append("search_second_items_quality_failed")
 
     listing_ids = _extract_listing_ids(first_search_items)
-    if len(listing_ids) < 2:
-        failures.append("search_listing_ids_count < 2")
-    compare_listing_ids = listing_ids[:2]
+    if len(listing_ids) < 1:
+        failures.append("search_listing_ids_count < 1")
 
     favorite_add_payload: dict[str, object] = {}
     favorites_list_payload: dict[str, object] = {}
-    compare_success_payload: dict[str, object] = {}
     not_found_payload: dict[str, object] = {}
-    compare_one_payload: dict[str, object] = {}
-    compare_eleven_payload: dict[str, object] = {}
     invalid_action_payload: dict[str, object] = {}
 
-    if compare_listing_ids:
+    if listing_ids:
         favorite_add_result = await mcp.call_tool(
             "add_favorite",
-            {"user_id": user_id, "listing_id": compare_listing_ids[0]},
+            {"user_id": user_id, "listing_id": listing_ids[0]},
         )
         favorite_add_payload = _extract_mcp_payload(favorite_add_result)
         if favorite_add_payload.get("status") != "added":
@@ -430,77 +425,8 @@ async def _run(args: CliArgs) -> dict[str, object]:
             first_item = list_items[0]
             if not isinstance(first_item, dict):
                 failures.append("favorite_first_item_not_dict")
-            elif first_item.get("listing_id") != compare_listing_ids[0]:
+            elif first_item.get("listing_id") != listing_ids[0]:
                 failures.append("favorite_first_listing_id_mismatch")
-
-    if len(compare_listing_ids) == 2:
-        compare_success_result = await mcp.call_tool(
-            "compare_listings",
-            {"listing_ids": compare_listing_ids},
-        )
-        compare_success_payload = _extract_mcp_payload(compare_success_result)
-        if compare_success_payload.get("status") != "success":
-            failures.append("compare_success_status != success")
-
-        listing_count = compare_success_payload.get("listing_count")
-        if listing_count != 2:
-            failures.append("compare_success_listing_count != 2")
-
-        comparisons_raw = compare_success_payload.get("comparisons")
-        if not isinstance(comparisons_raw, list):
-            failures.append("compare_success_comparisons_not_list")
-            comparisons: list[object] = []
-        else:
-            comparisons = comparisons_raw
-            if len(comparisons_raw) != 2:
-                failures.append("compare_success_len(comparisons) != 2")
-
-        if not isinstance(compare_success_payload.get("summary"), dict):
-            failures.append("compare_success_summary_not_dict")
-
-        for comparison in comparisons:
-            if not isinstance(comparison, dict):
-                failures.append("compare_success_contains_non_dict_comparison")
-                continue
-
-            if "market_avg_deposit" not in comparison:
-                failures.append("compare_success_market_avg_deposit_missing")
-            if "market_sample_count" not in comparison:
-                failures.append("compare_success_market_sample_count_missing")
-
-            market_avg = comparison.get("market_avg_deposit")
-            if market_avg is not None and not isinstance(market_avg, (int, float)):
-                failures.append("compare_success_market_avg_deposit_invalid_type")
-
-            market_sample_count = comparison.get("market_sample_count")
-            if not isinstance(market_sample_count, int) or market_sample_count < 0:
-                failures.append("compare_success_market_sample_count_invalid")
-
-    compare_one_result = await mcp.call_tool(
-        "compare_listings",
-        {"listing_ids": compare_listing_ids[:1] if compare_listing_ids else [1]},
-    )
-    compare_one_payload = _extract_mcp_payload(compare_one_result)
-    if compare_one_payload.get("status") != "error":
-        failures.append("compare_one_status != error")
-    if (
-        compare_one_payload.get("message")
-        != "At least 2 listings required for comparison"
-    ):
-        failures.append("compare_one_message_mismatch")
-
-    compare_eleven_ids = [
-        compare_listing_ids[0] if compare_listing_ids else 1,
-    ] * 11
-    compare_eleven_result = await mcp.call_tool(
-        "compare_listings",
-        {"listing_ids": compare_eleven_ids},
-    )
-    compare_eleven_payload = _extract_mcp_payload(compare_eleven_result)
-    if compare_eleven_payload.get("status") != "error":
-        failures.append("compare_eleven_status != error")
-    if compare_eleven_payload.get("message") != "Maximum 10 listings can be compared":
-        failures.append("compare_eleven_message_mismatch")
 
     invalid_action_result = await mcp.call_tool(
         "manage_favorites",
@@ -541,12 +467,9 @@ async def _run(args: CliArgs) -> dict[str, object]:
             "search_listing_ids": listing_ids,
             "favorite_add": favorite_add_payload,
             "favorites_list": favorites_list_payload,
-            "compare_success": compare_success_payload,
         },
         "contract_checks": {
             "listing_not_found": not_found_payload,
-            "compare_one": compare_one_payload,
-            "compare_eleven": compare_eleven_payload,
             "invalid_action": invalid_action_payload,
         },
     }

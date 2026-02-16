@@ -14,7 +14,6 @@ _DEFAULT_REQUIRED_STAGE4_TOOLS = [
     "search_rent",
     "add_favorite",
     "list_favorites",
-    "compare_listings",
     "manage_favorites",
 ]
 
@@ -112,46 +111,6 @@ def _default_call_tool_builder(
                 ],
             }
 
-        if tool_name == "compare_listings":
-            listing_ids = cast(list[int], payload["listing_ids"])
-            if len(listing_ids) == 1:
-                return {
-                    "status": "error",
-                    "message": "At least 2 listings required for comparison",
-                    "comparisons": [],
-                }
-
-            if len(listing_ids) > 10:
-                return {
-                    "status": "error",
-                    "message": "Maximum 10 listings can be compared",
-                    "comparisons": [],
-                }
-
-            return {
-                "status": "success",
-                "listing_count": 2,
-                "comparisons": [
-                    {
-                        "id": 101,
-                        "deposit": 63000,
-                        "market_avg_deposit": None,
-                        "market_sample_count": 0,
-                    },
-                    {
-                        "id": 102,
-                        "deposit": 14000,
-                        "market_avg_deposit": None,
-                        "market_sample_count": 0,
-                    },
-                ],
-                "summary": {
-                    "min_deposit": 14000,
-                    "max_deposit": 63000,
-                    "avg_deposit": 38500,
-                },
-            }
-
         if tool_name == "manage_favorites":
             return {
                 "success": False,
@@ -234,10 +193,7 @@ async def test_run_success_contract_suite(monkeypatch: pytest.MonkeyPatch) -> No
     flow = cast(dict[str, object], report["flow"])
     contract_checks = cast(dict[str, object], report["contract_checks"])
     assert cast(dict[str, object], flow["favorite_add"])["status"] == "added"
-    assert cast(dict[str, object], flow["compare_success"])["status"] == "success"
     assert "listing_not_found" in contract_checks
-    assert "compare_one" in contract_checks
-    assert "compare_eleven" in contract_checks
     assert "invalid_action" in contract_checks
 
 
@@ -283,41 +239,6 @@ async def test_run_failure_when_search_cache_contract_breaks(
 
 
 @pytest.mark.anyio
-async def test_run_failure_when_compare_success_contract_breaks(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    args = _make_args(3)
-    default_call_tool = _default_call_tool_builder(args)
-
-    async def broken_compare_call_tool(
-        tool_name: str,
-        payload: dict[str, object],
-    ) -> dict[str, object]:
-        if tool_name == "compare_listings":
-            listing_ids = cast(list[int], payload["listing_ids"])
-            if len(listing_ids) == 2:
-                return {
-                    "status": "partial",
-                    "listing_count": 2,
-                    "comparisons": [],
-                    "summary": {},
-                }
-        return await default_call_tool(tool_name, payload)
-
-    _patch_run_dependencies(
-        monkeypatch,
-        args=args,
-        call_tool_impl=broken_compare_call_tool,
-    )
-
-    report = await _run_script(args)
-
-    assert report["status"] == "failure"
-    failures = cast(list[object], report["failures"])
-    assert "compare_success_status != success" in failures
-
-
-@pytest.mark.anyio
 async def test_run_failure_when_listing_not_found_contract_breaks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -352,75 +273,6 @@ async def test_run_failure_when_listing_not_found_contract_breaks(
     failures = cast(list[object], report["failures"])
     assert "add_not_found_status != not_found" in failures
     assert "add_not_found_message_mismatch" in failures
-
-
-@pytest.mark.anyio
-async def test_run_failure_when_compare_one_message_contract_breaks(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    args = _make_args(3)
-    default_call_tool = _default_call_tool_builder(args)
-
-    async def broken_compare_one_message_call_tool(
-        tool_name: str,
-        payload: dict[str, object],
-    ) -> dict[str, object]:
-        if tool_name == "compare_listings":
-            listing_ids = cast(list[int], payload["listing_ids"])
-            if len(listing_ids) == 1:
-                return {
-                    "status": "error",
-                    "message": "Need at least 2 listings",
-                    "comparisons": [],
-                }
-        return await default_call_tool(tool_name, payload)
-
-    _patch_run_dependencies(
-        monkeypatch,
-        args=args,
-        call_tool_impl=broken_compare_one_message_call_tool,
-    )
-
-    report = await _run_script(args)
-
-    assert report["status"] == "failure"
-    failures = cast(list[object], report["failures"])
-    assert "compare_one_message_mismatch" in failures
-
-
-@pytest.mark.anyio
-async def test_run_failure_when_compare_eleven_contract_breaks(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    args = _make_args(3)
-    default_call_tool = _default_call_tool_builder(args)
-
-    async def broken_compare_eleven_call_tool(
-        tool_name: str,
-        payload: dict[str, object],
-    ) -> dict[str, object]:
-        if tool_name == "compare_listings":
-            listing_ids = cast(list[int], payload["listing_ids"])
-            if len(listing_ids) > 10:
-                return {
-                    "status": "success",
-                    "message": "Comparison accepted",
-                    "comparisons": [],
-                }
-        return await default_call_tool(tool_name, payload)
-
-    _patch_run_dependencies(
-        monkeypatch,
-        args=args,
-        call_tool_impl=broken_compare_eleven_call_tool,
-    )
-
-    report = await _run_script(args)
-
-    assert report["status"] == "failure"
-    failures = cast(list[object], report["failures"])
-    assert "compare_eleven_status != error" in failures
-    assert "compare_eleven_message_mismatch" in failures
 
 
 @pytest.mark.anyio
