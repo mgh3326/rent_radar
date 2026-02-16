@@ -1,6 +1,6 @@
 # Rent Radar MCP Roadmap Checklist
 
-Last Updated: 2026-02-15
+Last Updated: 2026-02-16
 
 ## Checklist Rules
 - `[ ]` Not started
@@ -17,12 +17,13 @@ Last Updated: 2026-02-15
   - `search_rent`
   - `list_regions`, `search_regions`
   - `add_favorite`, `list_favorites`, `remove_favorite`, `manage_favorites`
-  - `compare_listings` (market fields may be `None`/`0` when no real_trade data)
-- Deferred from Stage 4:
-  - `get_real_price`, `get_price_trend` (real_trades dependency)
-  - `check_jeonse_safety` (sale_trades dependency)
+- Hard-deleted surface (2026-02-16):
+  - `get_real_price`, `get_price_trend`
+  - `check_jeonse_safety`
+  - `compare_listings`
+  - Naver/public-data crawler & task/web paths
 - Recommended runtime allowlist (`.env`):
-  - `MCP_ENABLED_TOOLS=search_rent,list_regions,search_regions,add_favorite,list_favorites,remove_favorite,manage_favorites,compare_listings`
+  - `MCP_ENABLED_TOOLS=search_rent,list_regions,search_regions,add_favorite,list_favorites,remove_favorite,manage_favorites`
 
 ## Stage 2 (Completed)
 - [x] `search_rent` seed-based e2e script implemented
@@ -47,8 +48,8 @@ Last Updated: 2026-02-15
 ## Stage 4 (Completed) - Zigbang-first MCP Coverage
 - [x] Zigbang-only runtime profile documented (`MCP_ENABLED_TOOLS` based)
   - Evidence: `/Users/robin/PycharmProjects/rent_radar/.env.example` adds Stage 4 Zigbang-only allowlist example and `/Users/robin/PycharmProjects/rent_radar/README.md` includes the same runtime profile.
-- [x] Add MCP contract tests for region/favorite/compare tools
-  - Evidence: `uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_region_tools.py -q` -> `4 passed`, `uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_favorite_tools.py -q` -> `7 passed`, `uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_compare_listings.py -q` -> `5 passed`.
+- [x] Add MCP contract tests for region/favorite tools
+  - Evidence: `uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_region_tools.py -q` -> `4 passed`, `uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_favorite_tools.py -q` -> `7 passed`.
 - [x] Add Zigbang seed-based MCP integrated e2e (`search_rent` -> `favorite` -> `compare`)
   - Evidence: `uv run python /Users/robin/PycharmProjects/rent_radar/scripts/e2e_zigbang_mcp_tool_suite.py --cleanup-scope source_only --mcp-limit 3` -> `status=success`.
 - [x] Validate boundary/error contracts (`listing not found`, compare `1`/`11`, `invalid action`)
@@ -81,9 +82,8 @@ Last Updated: 2026-02-15
 ## Verification Commands (Stage 4 Target)
 - `uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_region_tools.py -q`
 - `uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_favorite_tools.py -q`
-- `uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_compare_listings.py -q`
 - `uv run python /Users/robin/PycharmProjects/rent_radar/scripts/e2e_zigbang_mcp_tool_suite.py --cleanup-scope source_only --mcp-limit 3`
-- `uv run ruff check /Users/robin/PycharmProjects/rent_radar/scripts/e2e_zigbang_mcp_tool_suite.py /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_region_tools.py /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_favorite_tools.py /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_compare_listings.py /Users/robin/PycharmProjects/rent_radar/tests/test_e2e_zigbang_mcp_tool_suite.py`
+- `uv run ruff check /Users/robin/PycharmProjects/rent_radar/scripts/e2e_zigbang_mcp_tool_suite.py /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_region_tools.py /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_favorite_tools.py /Users/robin/PycharmProjects/rent_radar/tests/test_e2e_zigbang_mcp_tool_suite.py`
 
 ## Execution Log
 
@@ -94,9 +94,9 @@ Last Updated: 2026-02-15
 | 2026-02-15 | Stage 2 baseline verification | `test_mcp_search_rent.py: 6 passed`, `e2e_mcp_search_rent_check.py: status=success` |
 | 2026-02-15 | Stage 3 MCP allowlist | `test_mcp_allowlist.py: 5 passed`, `test_mcp_search_rent.py: 6 passed`, docs/env/checklist updated |
 | 2026-02-15 | Stage 3 final verification refresh | `uv run pytest tests/test_mcp_allowlist.py -q: 7 passed`, `uv run pytest tests/test_mcp_search_rent.py -q: 6 passed`, `uv run ruff check ...: All checks passed` |
-| 2026-02-15 | Stage 4 Zigbang-first MCP contract tests (baseline before hardening) | `uv run pytest tests/test_mcp_region_tools.py -q: 4 passed`, `uv run pytest tests/test_mcp_favorite_tools.py -q: 7 passed`, `uv run pytest tests/test_mcp_compare_listings.py -q: 5 passed`, `uv run pytest tests/test_e2e_zigbang_mcp_tool_suite.py -q: 6 passed` |
+| 2026-02-15 | Stage 4 Zigbang-first MCP contract tests (baseline before hardening) | `uv run pytest tests/test_mcp_region_tools.py -q: 4 passed`, `uv run pytest tests/test_mcp_favorite_tools.py -q: 7 passed`, `uv run pytest tests/test_e2e_zigbang_mcp_tool_suite.py -q: 6 passed` |
 | 2026-02-15 | Stage 4 Zigbang seed integrated e2e | `uv run python scripts/e2e_zigbang_mcp_tool_suite.py --cleanup-scope source_only --mcp-limit 3` -> `status=success` |
-| 2026-02-15 | Stage 4 static checks and docs refresh | `uv run ruff check scripts/e2e_zigbang_mcp_tool_suite.py tests/test_mcp_region_tools.py tests/test_mcp_favorite_tools.py tests/test_mcp_compare_listings.py tests/test_e2e_zigbang_mcp_tool_suite.py` -> `All checks passed`, README/.env/checklist Stage 4 section updated |
+| 2026-02-15 | Stage 4 static checks and docs refresh | `uv run ruff check scripts/e2e_zigbang_mcp_tool_suite.py tests/test_mcp_region_tools.py tests/test_mcp_favorite_tools.py tests/test_e2e_zigbang_mcp_tool_suite.py` -> `All checks passed`, README/.env/checklist Stage 4 section updated |
 | 2026-02-15 | Stage 4 preflight + contract regression hardening | `uv run pytest tests/test_e2e_zigbang_mcp_tool_suite.py -q: 10 passed` (required-tool preflight + listing_not_found/compare_one/compare_eleven drift checks), `uv run ruff check ...` -> `All checks passed` |
 
 ### Archived / Deferred (Naver Track)

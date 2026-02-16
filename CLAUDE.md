@@ -2,7 +2,7 @@
 
 ## 프로젝트 개요
 
-공공주택 임대료 정보 수집 및 분석 시스템. 국토교통부(MOLIT) 공공 API에서 아파트 전·월세 실거래 데이터를 수집하고, FastAPI REST API와 MCP 서버를 통해 분석 결과를 제공한다.
+직방(Zigbang) 매물 데이터 수집 및 MCP 질의를 제공하는 시스템. FastAPI + TaskIQ + PostgreSQL 기반으로 구성되며, 런타임 표면은 Zigbang 중심으로 유지된다.
 
 ## 기술 스택
 
@@ -14,7 +14,6 @@
 - **캐시/큐**: Redis 7 + TaskIQ
 - **마이그레이션**: Alembic
 - **HTTP 클라이언트**: httpx
-- **XML 파싱**: BeautifulSoup4
 - **설정 관리**: pydantic-settings
 - **AI 통합**: MCP (Model Context Protocol)
 - **테스트**: pytest + pytest-anyio
@@ -26,32 +25,28 @@
 src/
 ├── config/settings.py        # 환경 변수 로딩 (Pydantic Settings)
 ├── models/
-│   ├── base.py               # SQLAlchemy Base
-│   ├── listing.py            # 매물 테이블 (향후 웹 스크래핑용)
-│   └── real_trade.py         # 실거래 테이블 (공공 API 데이터)
+│   ├── listing.py            # 매물 테이블
+│   ├── favorite.py           # 관심 매물 테이블
+│   └── price_change.py       # 가격 변동 이력 테이블
 ├── db/
 │   ├── session.py            # 비동기 DB 세션 관리
 │   └── repositories.py       # 데이터 접근 레이어 (upsert, 조회, 집계)
 ├── crawlers/
 │   ├── base.py               # 크롤러 베이스 정의
-│   └── public_api.py         # MOLIT 공공 API 크롤러
+│   └── zigbang.py            # 직방 API 크롤러
 ├── taskiq_app/
 │   ├── broker.py             # Redis 브로커 + 스케줄러 설정
-│   ├── tasks.py              # 백그라운드 태스크 (crawl_real_trade)
+│   ├── tasks.py              # 백그라운드 태스크 (crawl_zigbang_listings, monitor_favorites)
 │   ├── worker.py             # 워커 진입점
 │   └── dedup.py              # Redis 기반 중복 실행 방지
-├── services/
-│   └── price_service.py      # 가격 데이터 비즈니스 로직
 ├── mcp_server/
 │   ├── server.py             # MCP 서버 진입점
-│   └── tools/price.py        # MCP 도구 (get_real_price, get_price_trend)
+│   └── tools/                # MCP 도구 (listing/favorite/region)
 └── main.py                   # FastAPI 앱 (브로커 라이프사이클 포함)
 tests/
 ├── conftest.py               # 픽스처 (InMemoryBroker, dedup 초기화)
 ├── test_tasks.py             # 태스크 단위 테스트
-└── test_tools.py             # 서비스 레이어 테스트
-alembic/
-└── versions/                 # DB 마이그레이션 스크립트
+└── test_mcp_*.py             # MCP 도구 단위/계약 테스트
 ```
 
 ## 빌드 및 실행
@@ -59,7 +54,7 @@ alembic/
 ### 의존성 설치
 
 ```bash
-uv sync
+uv sync --extra dev
 ```
 
 ### Docker Compose로 실행 (권장)
@@ -76,44 +71,41 @@ docker compose up -d
 ### 로컬 실행 (Docker 없이)
 
 ```bash
-cp .env.example .env          # 환경 변수 설정
-alembic upgrade head          # DB 마이그레이션
-uvicorn src.main:app --reload --port 8000
+cp .env.example .env
+alembic upgrade head
+uvicorn src.main:app --reload --port 8001
 ```
 
 ## 테스트
 
 ```bash
-pytest            # 전체 테스트
-pytest -v         # 상세 출력
-pytest tests/test_tasks.py    # 특정 파일만
+uv run pytest -q
+uv run pytest tests/test_tasks.py tests/test_web_router_qa.py -q
+uv run pytest tests/test_mcp_allowlist.py tests/test_mcp_region_tools.py tests/test_mcp_favorite_tools.py tests/test_e2e_zigbang_mcp_tool_suite.py -q
 ```
 
-테스트 환경에서는 `TASKIQ_TESTING=true`로 InMemoryBroker가 사용된다. conftest.py에서 자동 설정됨.
-
-## DB 마이그레이션
-
-```bash
-alembic upgrade head                          # 최신 마이그레이션 적용
-alembic revision --autogenerate -m "설명"     # 새 마이그레이션 생성
-alembic downgrade -1                          # 롤백
-```
+테스트 환경에서는 `TASKIQ_TESTING=true`로 InMemoryBroker가 사용된다.
 
 ## 환경 변수 (.env)
 
-필수 변수:
+핵심 변수:
 - `DATABASE_URL` — PostgreSQL 비동기 연결 문자열
 - `REDIS_URL` — Redis 연결 URL
-- `PUBLIC_DATA_API_KEY` — data.go.kr API 키 (없으면 mock 데이터 사용)
+- `MCP_ENABLED_TOOLS` — MCP 허용 도구 목록 (미설정/빈 값이면 전체 활성)
 
-선택 변수:
-- `APP_ENV` — 실행 환경 (local/development/production)
-- `TARGET_PROPERTY_TYPES` — 수집 대상 매물유형 (쉼표 구분, 기본: apt)
-  - 유효값: `apt` (아파트), `villa` (연립다세대), `officetel` (오피스텔)
-- `TARGET_REGION_CODES` — 수집 대상 지역코드 (쉼표 구분, 기본: 11110 종로구)
-- `PUBLIC_DATA_FETCH_MONTHS` — 수집 기간 (1~24개월, 기본: 2)
-- `PUBLIC_DATA_REQUEST_TIMEOUT_SECONDS` — API 요청 타임아웃 (기본: 10.0)
-- `PUBLIC_DATA_API_BASE_URL` — 공공데이터포털 API 베이스 URL (기본: https://apis.data.go.kr/1613000/)
+권장 MCP allowlist:
+
+```dotenv
+MCP_ENABLED_TOOLS=search_rent,list_regions,search_regions,add_favorite,list_favorites,remove_favorite,manage_favorites
+```
+
+보조 변수:
+- `TARGET_PROPERTY_TYPES` — 수집 대상 매물유형 (기본: apt)
+- `TARGET_REGION_CODES` — 수집 대상 지역코드 (기본: 11110)
+- `LISTING_CACHE_TTL_SECONDS` — 매물 조회 캐시 TTL
+- `CRAWL_DEDUP_TTL_SECONDS` — 태스크 dedup 락 TTL
+
+`PUBLIC_DATA_*` 변수는 레거시 호환용이며 Zigbang-only 런타임에서는 사용하지 않는다.
 
 ## 주요 컨벤션
 
@@ -121,17 +113,15 @@ alembic downgrade -1                          # 롤백
 - **Repository 패턴**: `src/db/repositories.py`에서 모든 DB 쿼리 처리
 - **Upsert 전략**: `ON CONFLICT DO NOTHING`으로 중복 데이터 무시
 - **Dedup 락**: Redis 기반 분산 락으로 태스크 중복 실행 방지
-- **스케줄링**: 매일 03:00 UTC에 `crawl_real_trade` 태스크 자동 실행
+- **스케줄링**:
+  - `crawl_zigbang_listings`: 6시간마다 (`30 */6 * * *`)
+  - `monitor_favorites`: 12시간마다 (`0 */12 * * *`)
 
-## Docker Compose 서비스 구성
+## MCP 도구 범위
 
-| 서비스 | 이미지/빌드 | 역할 |
-|---------|-------------|------|
-| postgres | postgres:16-alpine | 데이터 저장소 |
-| redis | redis:7-alpine | 태스크 큐 + 캐시 |
-| api | ./Dockerfile | FastAPI REST API |
-| worker | ./Dockerfile | TaskIQ 백그라운드 워커 |
-| scheduler | ./Dockerfile | 크론 스케줄러 |
+- `search_rent`
+- `list_regions`, `search_regions`
+- `add_favorite`, `remove_favorite`, `list_favorites`, `manage_favorites`
 
 ## 브랜치 전략
 

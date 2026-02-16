@@ -1,10 +1,10 @@
 # Rent Radar
 
-공공주택 임대료 정보 수집 및 분석 시스템
+직방 매물 데이터 수집 및 MCP 기반 질의 시스템
 
 ## Features
 
-- MOLIT (국토교통부) 공동주택 임대료 데이터 수집
+- 직방(Zigbang) 매물 데이터 수집
 - 자동화된 데이터 업데이트 (스케줄러)
 - RESTful API
 - MCP (Model Context Protocol) 서버 - Claude Desktop 연동
@@ -40,11 +40,11 @@ cp .env.example .env
 **Environment Variables:**
 - `DATABASE_URL`: PostgreSQL connection URL (로컬: `postgresql+asyncpg://rent:rent_password@localhost:5433/rent_finder`)
 - `REDIS_URL`: Redis connection URL (로컬: `redis://localhost:6380/0`)
-- `PUBLIC_DATA_API_KEY`: 공공데이터포털 API Key (필수, 없으면 mock 데이터 사용)
 - `TARGET_REGION_CODES`: 대상 지역 코드 (기본: 11110 - 종로구)
 - `TARGET_PROPERTY_TYPES`: 매물 유형 (apt, villa, officetel)
 - `MCP_ENABLED_TOOLS`: MCP tool allowlist (콤마 구분, 미설정/빈 값이면 전체 tool 활성)
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`: 텔레그램 알림용
+- `PUBLIC_DATA_*`: 레거시 설정 (Zigbang-only 런타임에서는 사용하지 않음)
 
 4. Database migration
 ```bash
@@ -79,24 +79,8 @@ Claude Desktop 또는 MCP 클라이언트에서 사용 가능:
 
 **Available Tools:**
 - `search_rent` - 임대 매물 검색 (`listings` 기반, 캐시 적용, 0건 시 데이터 소스 안내 메시지 포함)
-- `get_real_price` - 실거래가 조회 (`real_trades` 기반, `limit` 기본 50 / 최대 200, `total_count`/`returned_count`/`has_more` 포함)
-- `get_price_trend` - 가격 추이
-- `check_jeonse_safety` - 전세 안전성 진단
-- `compare_listings` - 매물 비교
 - `add_favorite`, `remove_favorite`, `list_favorites`, `manage_favorites` - 관심매물 관리
 - `list_regions`, `search_regions` - 지역 정보
-
-**`get_real_price` 응답 메타 예시:**
-
-```json
-{
-  "count": 20,
-  "returned_count": 20,
-  "total_count": 1372,
-  "has_more": true,
-  "items": []
-}
-```
 
 **Tool Allowlist (`MCP_ENABLED_TOOLS`):**
 - 미설정/빈 값: 전체 tool 활성 (기본 동작)
@@ -117,8 +101,6 @@ Claude Desktop 또는 MCP 클라이언트에서 사용 가능:
 
 ## Scheduled Tasks
 
-- **crawl_real_trade**: 매일 03:00 UTC (12:00 KST)
-- **crawl_naver_listings**: 6시간마다 (0 */6)
 - **crawl_zigbang_listings**: 6시간마다 (30 */6)
 - **monitor_favorites**: 12시간마다 (가격 변동 감지)
 
@@ -209,11 +191,11 @@ uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_search_rent
 
 ## Zigbang-Only MCP Tool Suite Verification (Stage 4)
 
-- Goal: validate `search_rent -> add/list favorites -> compare_listings` with Zigbang seed rows and fixed error contracts.
+- Goal: validate `search_rent -> add/list favorites` with Zigbang seed rows and fixed error contracts.
 - Recommended runtime allowlist:
 
 ```bash
-MCP_ENABLED_TOOLS=search_rent,list_regions,search_regions,add_favorite,list_favorites,remove_favorite,manage_favorites,compare_listings
+MCP_ENABLED_TOOLS=search_rent,list_regions,search_regions,add_favorite,list_favorites,remove_favorite,manage_favorites
 ```
 
 - Preflight behavior: `scripts/e2e_zigbang_mcp_tool_suite.py` checks MCP tools required by this Stage 4 tool-suite script at startup via `mcp.list_tools()` and fails fast with `RuntimeError` (including recommended `MCP_ENABLED_TOOLS`) before cleanup/upsert if any required tool is missing.
@@ -223,7 +205,6 @@ MCP_ENABLED_TOOLS=search_rent,list_regions,search_regions,add_favorite,list_favo
 ```bash
 uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_region_tools.py -q
 uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_favorite_tools.py -q
-uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_mcp_compare_listings.py -q
 uv run pytest /Users/robin/PycharmProjects/rent_radar/tests/test_e2e_zigbang_mcp_tool_suite.py -q
 uv run python /Users/robin/PycharmProjects/rent_radar/scripts/e2e_zigbang_mcp_tool_suite.py --cleanup-scope source_only --mcp-limit 3
 ```
@@ -241,10 +222,8 @@ MCP_ENABLED_TOOLS=search_rent uv run python /Users/robin/PycharmProjects/rent_ra
 
 - `search_rent` returns `count > 0`, `count == len(items)`, first call `cache_hit=false`, second call `cache_hit=true`
 - `add_favorite` succeeds for seeded listing and `list_favorites` satisfies `count == len(items)`
-- `compare_listings` succeeds for 2 listings and returns `status`, `listing_count`, `comparisons`, `summary`
-- Error contracts are fixed by tests: `listing not found`, compare `1`/`11`, `manage_favorites(action="invalid")`
+- Error contracts are fixed by tests: `listing not found`, `manage_favorites(action="invalid")`
 - Missing required Stage 4 tools causes immediate preflight failure before DB operations (fail-fast, deterministic env contract)
-- `compare_listings` market fields (`market_avg_deposit`, `market_sample_count`) may be `None`/`0` and are treated as valid in Stage 4
 
 ## 수동 시드 기반 MCP 지역검증
 
@@ -263,7 +242,7 @@ uv run python /Users/robin/PycharmProjects/rent_radar/scripts/manual_mcp_region_
 ```
 
 - `manual_seed_mcp_region_test_data.py`는 `source=manual_test_seed` 데이터만 정리/재시드하고, 검증에 사용하는 `region_code + property_type=apt` 캐시 키를 함께 삭제
-- `11680`은 Naver 형태(`dong=역삼동`, `address`에 `강남구`) 시드를 포함하여 하이브리드 지역필터를 검증
+- `11680`은 강남구 시드로 지역 필터를 검증
 
 ## Architecture
 
