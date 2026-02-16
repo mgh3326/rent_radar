@@ -90,6 +90,7 @@ Last Updated: 2026-02-15
 ### Active Roadmap Evidence
 | Date | Stage/Item | Evidence |
 |---|---|---|
+| 2026-02-16 | Archive baseline before hard delete | Archive branch: `archive/pre-zigbang-hard-delete-2026-02-16`, Archive tag: `archive-zigbang-hard-delete-base-2026-02-16` |
 | 2026-02-15 | Stage 2 baseline verification | `test_mcp_search_rent.py: 6 passed`, `e2e_mcp_search_rent_check.py: status=success` |
 | 2026-02-15 | Stage 3 MCP allowlist | `test_mcp_allowlist.py: 5 passed`, `test_mcp_search_rent.py: 6 passed`, docs/env/checklist updated |
 | 2026-02-15 | Stage 3 final verification refresh | `uv run pytest tests/test_mcp_allowlist.py -q: 7 passed`, `uv run pytest tests/test_mcp_search_rent.py -q: 6 passed`, `uv run ruff check ...: All checks passed` |
