@@ -4,8 +4,6 @@ import logging
 from typing import Any, cast
 
 from src.config import get_settings
-
-logger = logging.getLogger(__name__)
 from src.crawlers.zigbang import ZigbangCrawler
 from src.db.repositories import (
     ListingUpsert,
@@ -21,6 +19,7 @@ from src.taskiq_app.dedup import (
     release_dedup_lock,
 )
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
@@ -123,7 +122,7 @@ async def monitor_favorites() -> dict[str, object]:
             stmt = (
                 select(Favorite, Listing)
                 .join(Listing, Favorite.listing_id == Listing.id)
-                .where(Listing.is_active == True)
+                .where(Listing.is_active)
             )
             result = await session.execute(stmt)
             rows = result.all()
@@ -164,7 +163,11 @@ async def monitor_favorites() -> dict[str, object]:
                 await upsert_price_changes(session, price_changes)
 
             if favorites_to_update:
-                listing_map = {f: l for f, l in rows if f.id in favorites_to_update}
+                listing_map = {
+                    favorite_obj: listing_obj
+                    for favorite_obj, listing_obj in rows
+                    if favorite_obj.id in favorites_to_update
+                }
                 for fav_id in favorites_to_update:
                     fav = next((f for f, _ in rows if f.id == fav_id), None)
                     lst = listing_map.get(fav)
