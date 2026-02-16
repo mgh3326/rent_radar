@@ -376,3 +376,33 @@ async def test_retry_backoff_applies_jitter(
     assert rows
     assert attempts == 2
     assert sleep_calls == [1.1]
+
+
+async def test_run_uses_configured_base_delay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    crawler = ZigbangCrawler(
+        region_names=["종로구"],
+        property_types=["아파트"],
+        base_delay_seconds=1.5,
+    )
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleep_calls.append(seconds)
+
+    async def fake_search_by_region_name(
+        _client: httpx.AsyncClient,
+        _region_name: str,
+        _property_type: str,
+        _rent_type: str,
+    ) -> list[dict[str, object]]:
+        return []
+
+    monkeypatch.setattr("src.crawlers.zigbang.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr(crawler, "_search_by_region_name", fake_search_by_region_name)
+
+    result = await crawler.run()
+
+    assert result.count == 0
+    assert sleep_calls[:2] == [1.5, 1.5]

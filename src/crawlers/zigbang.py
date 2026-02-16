@@ -346,7 +346,7 @@ class ZigbangCrawler:
             for region_name in self._region_names:
                 for property_type in self._property_types:
                     for rent_type in ["전세", "월세"]:
-                        await asyncio.sleep(1.0)
+                        await asyncio.sleep(self._base_delay_seconds)
 
                         search_results = await self._search_by_region_name(
                             client, region_name, property_type, rent_type
@@ -396,7 +396,7 @@ class ZigbangCrawler:
                         )
 
                         if len(all_rows) % 20 == 0:
-                            await asyncio.sleep(2.0)
+                            await asyncio.sleep(self._base_delay_seconds * 2)
 
         self.last_run_metrics = {
             "raw_count": raw_item_count,
