@@ -17,11 +17,7 @@ from src.db.repositories import (
 from src.db.session import get_db_session
 from src.services import PriceService
 from src.services.qa_service import QAService
-from src.taskiq_app.tasks import (
-    enqueue_crawl_real_trade,
-    enqueue_crawl_naver_listings,
-    enqueue_crawl_zigbang_listings,
-)
+from src.taskiq_app.tasks import enqueue_crawl_zigbang_listings
 
 templates = Jinja2Templates(directory="src/web/templates")
 
@@ -80,53 +76,19 @@ async def dashboard(
 
 @router.post("/crawl-listings", response_class=RedirectResponse)
 async def trigger_crawl_listings(
-    source: str = Form("all"),
+    source: str = Form("zigbang"),
     force: bool = Form(False),
 ) -> RedirectResponse:
-    """Trigger crawl for listings (naver/zigbang/all)."""
-
     fingerprint = "manual"
     if force:
         fingerprint = f"force-{datetime.now(UTC).isoformat()}"
 
-    results = []
-    if source in ("naver", "all"):
-        results.append(await enqueue_crawl_naver_listings(fingerprint=fingerprint))
-    if source in ("zigbang", "all"):
-        results.append(await enqueue_crawl_zigbang_listings(fingerprint=fingerprint))
+    if source != "zigbang":
+        source = "zigbang"
 
-    any_enqueued = any(r.get("enqueued") for r in results)
-    status = "enqueued" if any_enqueued else "duplicate"
-    redirect_url = f"/web/listings?source={source}&crawl_status={status}"
-    return RedirectResponse(url=redirect_url, status_code=303)
-
-
-@router.post("/crawl")
-async def trigger_crawl(
-    region_code: str = Form(...),
-    property_type: str = Form("apt"),
-    start_year_month: str = Form(""),
-    end_year_month: str = Form(""),
-    force: bool = Form(False),
-) -> RedirectResponse:
-    region_codes = [region_code] if region_code else None
-    property_types = [property_type] if property_type else None
-    start_ym = start_year_month if start_year_month else None
-    end_ym = end_year_month if end_year_month else None
-
-    fingerprint = "manual"
-    if force:
-        fingerprint = f"force-{datetime.now(UTC).isoformat()}"
-
-    result = await enqueue_crawl_real_trade(
-        fingerprint=fingerprint,
-        region_codes=region_codes,
-        property_types=property_types,
-        start_year_month=start_ym,
-        end_year_month=end_ym,
-    )
+    result = await enqueue_crawl_zigbang_listings(fingerprint=fingerprint)
     status = "enqueued" if result.get("enqueued") else "duplicate"
-    redirect_url = f"/web/?region_code={region_code}&property_type={property_type}&crawl_status={status}"
+    redirect_url = f"/web/listings?source={source}&crawl_status={status}"
     return RedirectResponse(url=redirect_url, status_code=303)
 
 
