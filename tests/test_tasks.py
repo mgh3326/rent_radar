@@ -8,6 +8,7 @@ import pytest
 
 import src.taskiq_app.tasks as task_module
 from src.crawlers.base import CrawlResult
+from src.crawlers.zigbang import ZigbangSchemaMismatchError
 from src.db.repositories import ListingUpsert
 from src.taskiq_app.tasks import (
     crawl_zigbang_listings,
@@ -138,3 +139,31 @@ async def test_crawl_zigbang_listings_releases_lock_on_failure(
 
     assert result.is_err
     assert released
+
+
+@pytest.mark.anyio
+async def test_crawl_zigbang_schema_mismatch_fails_before_upsert(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = {"persist": 0}
+
+    async def fake_run(self: object) -> CrawlResult[ListingUpsert]:
+        raise ZigbangSchemaMismatchError("raw_count=5 parsed_count=0")
+
+    async def fake_persist(_rows: list[ListingUpsert]) -> int:
+        called["persist"] += 1
+        return 0
+
+    async def fake_lock(key: str, ttl_seconds: int) -> bool:  # noqa: ARG001
+        return True
+
+    monkeypatch.setattr("src.crawlers.zigbang.ZigbangCrawler.run", fake_run)
+    monkeypatch.setattr("src.taskiq_app.tasks._persist_listings", fake_persist)
+    monkeypatch.setattr("src.taskiq_app.tasks.acquire_dedup_lock", fake_lock)
+
+    task_fn = cast(Any, crawl_zigbang_listings)
+    task = await task_fn.kiq()
+    result = await task.wait_result(timeout=30)
+
+    assert result.is_err
+    assert called["persist"] == 0
