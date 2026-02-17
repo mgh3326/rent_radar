@@ -112,6 +112,38 @@ async def test_run_reports_error_on_unexpected_exception() -> None:
     assert report["error_type"] == "RuntimeError"
 
 
+async def test_run_reports_error_on_non_429_http_status() -> None:
+    seen_calls: list[int] = []
+
+    async def fake_request(
+        *,
+        region_code: str,
+        property_type: str,
+        trade_type: str,
+        request_index: int,
+    ) -> DummyResponse:
+        _ = region_code
+        _ = property_type
+        _ = trade_type
+        seen_calls.append(request_index)
+        return DummyResponse(500, headers={})
+
+    args = observer.CliArgs(
+        region_codes=["11680"],
+        property_types=["APT"],
+        max_regions=1,
+        requests_per_region=3,
+        timeout_seconds=5.0,
+        fingerprint="stage6-observe-test",
+    )
+    report = await observer._run(args, request_fn=fake_request)
+
+    assert report["status"] == "error"
+    assert report["result"] == "failure"
+    assert "reason" in report
+    assert seen_calls == [1]
+
+
 async def test_rate_limited_report_contains_context_and_headers() -> None:
     async def fake_request(
         *,

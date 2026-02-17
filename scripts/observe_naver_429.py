@@ -217,6 +217,24 @@ async def _run_with_request_fn(
                                 regions_attempted=regions_attempted,
                                 first_429=first_429,
                             )
+                        if status_code != 200:
+                            return _build_report(
+                                args=args,
+                                executed_at=executed_at,
+                                status="error",
+                                result="failure",
+                                attempted_requests=request_index,
+                                regions_attempted=regions_attempted,
+                                first_429=None,
+                                reason=(
+                                    "Unexpected HTTP status "
+                                    f"{status_code} at request_index={request_index} "
+                                    f"(region_code={region_code}, "
+                                    f"property_type={property_type}, "
+                                    f"trade_type={trade_type})"
+                                ),
+                                error_type="HTTPStatusError",
+                            )
 
         return _build_report(
             args=args,
