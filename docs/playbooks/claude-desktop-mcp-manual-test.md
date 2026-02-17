@@ -53,6 +53,30 @@ Action hints:
 - `skipped_duplicate_execution`: rerun after dedup TTL or use `--allow-duplicate-run` when lock collision is acceptable
 - `unexpected_exception`: inspect traceback/logs and fix root cause before retry
 
+## Stage 6 Naver 429 Observer (Local Manual)
+
+Run dedicated observer probe:
+
+```bash
+uv run python scripts/observe_naver_429.py --region-codes 11680 --property-types APT --max-regions 1 --requests-per-region 5 --fingerprint stage6-observe-20260217
+```
+
+Contract:
+- JSON only
+- `status` is one of `ok`, `rate_limited`, `error`
+- `result` is `success` only when `status=ok`; otherwise `failure`
+
+Fail-fast rule:
+- Observer stops immediately on first HTTP `429`
+- First event context is stored in `first_429` with request index and header subset
+
+Evidence fields to copy into roadmap:
+- `status`
+- `summary.attempted_requests`
+- `summary.first_429_at_request_index`
+- `first_429.region_code` and `first_429.response_headers_subset`
+- `executed_at` and `fingerprint`
+
 ## Start MCP Server
 
 ```bash
