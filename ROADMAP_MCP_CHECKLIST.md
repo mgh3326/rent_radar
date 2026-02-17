@@ -75,9 +75,9 @@ Last Updated: 2026-02-17
 
 ### Phase 1 (Observer-Only)
 - [x] Add Naver 429 observer runner with first-429 fail-fast contract
-  - Evidence: `uv run python scripts/observe_naver_429.py --region-codes 11680 --property-types APT --max-regions 1 --requests-per-region 5 --fingerprint stage6-observe-20260217` -> `status=ok`, `summary.attempted_requests=10`, `summary.first_429_at_request_index=null`.
+  - Evidence: `uv run python scripts/observe_naver_429.py --region-codes 11680 --property-types APT --max-regions 1 --requests-per-region 5 --fingerprint stage6-observe-20260217` -> `status=rate_limited`, `summary.attempted_requests=1`, `summary.first_429_at_request_index=1`, `first_429.retry_after=null`.
 - [x] Add observer report schema hardening and contract tests
-  - Evidence: `uv run python -m pytest tests/test_observe_naver_429.py -q` -> `5 passed`; `uv run ruff check scripts/observe_naver_429.py tests/test_observe_naver_429.py` -> `All checks passed!`.
+  - Evidence: `uv run python -m pytest tests/test_observe_naver_429.py -q` -> `8 passed`; `uv run ruff check scripts/observe_naver_429.py tests/test_observe_naver_429.py` -> `All checks passed!`.
 
 ### Phase 2 (Deferred)
 - [ ] Implement 429 policy (`Retry-After` first, fallback to exponential backoff + jitter)
@@ -102,7 +102,7 @@ Last Updated: 2026-02-17
 ### Active Roadmap Evidence
 | Date | Stage/Item | Evidence |
 |---|---|---|
-| 2026-02-17 | Stage 6 phase-1 observer verification | `uv run python scripts/observe_naver_429.py --region-codes 11680 --property-types APT --max-regions 1 --requests-per-region 5 --fingerprint stage6-observe-20260217` -> `status=ok`, `attempted_requests=10`; `uv run python -m pytest tests/test_observe_naver_429.py -q` -> `5 passed`; `uv run ruff check scripts/observe_naver_429.py tests/test_observe_naver_429.py` -> `All checks passed!` |
+| 2026-02-17 | Stage 6 phase-1 observer verification | `uv run python scripts/observe_naver_429.py --region-codes 11680 --property-types APT --max-regions 1 --requests-per-region 5 --fingerprint stage6-observe-20260217` -> `status=rate_limited`, `attempted_requests=1`, `first_429_at_request_index=1`, `retry_after=null`; `uv run python -m pytest tests/test_observe_naver_429.py -q` -> `8 passed`; `uv run ruff check scripts/observe_naver_429.py tests/test_observe_naver_429.py` -> `All checks passed!` |
 | 2026-02-16 | Archive baseline before hard delete | Archive branch: `archive/pre-zigbang-hard-delete-2026-02-16`, Archive tag: `archive-zigbang-hard-delete-base-2026-02-16` |
 | 2026-02-16 | Zigbang-only hard-delete verification | `uv run ruff check src tests scripts` -> `All checks passed`, retained suite `42 passed`, `uv run python scripts/e2e_zigbang_mcp_tool_suite.py --cleanup-scope source_only --mcp-limit 3` -> `status=success` |
 | 2026-02-16 | Stage 5 zigbang live smoke and verification refresh | `uv run python scripts/smoke_zigbang_live_crawl.py --fingerprint stage5-smoke-20260216` -> `result=success`, `status=ok`; `uv run pytest tests/test_smoke_zigbang_live_crawl.py tests/test_tasks.py tests/test_zigbang_crawler.py -q` -> `24 passed`; `uv run ruff check scripts/smoke_zigbang_live_crawl.py tests/test_smoke_zigbang_live_crawl.py tests/test_tasks.py` -> `All checks passed` |
