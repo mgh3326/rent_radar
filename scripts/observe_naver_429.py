@@ -27,6 +27,22 @@ class CliArgs:
 RequestFn = Callable[..., Awaitable[object]]
 
 
+def _build_request_headers() -> dict[str, str]:
+    return {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Safari/537.36"
+        ),
+        "Referer": "https://new.land.naver.com/articles",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+        "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"macOS"',
+    }
+
+
 def _split_csv(raw_value: str) -> list[str]:
     return [part.strip() for part in raw_value.split(",") if part.strip()]
 
@@ -125,6 +141,21 @@ def _extract_rate_limit_headers(headers: Mapping[str, str]) -> dict[str, str]:
     return selected
 
 
+def _extract_non_200_headers(headers: Mapping[str, str]) -> dict[str, str]:
+    lowered_headers = {str(key).lower(): str(value) for key, value in headers.items()}
+    selected: dict[str, str] = {}
+    for key in (
+        "location",
+        "retry-after",
+        "x-ratelimit-remaining",
+        "x-ratelimit-reset",
+    ):
+        value = lowered_headers.get(key)
+        if value is not None:
+            selected[key] = value
+    return selected
+
+
 def _build_action_hint(status: str) -> str:
     if status == "ok":
         return "No HTTP 429 observed in configured probe scope."
@@ -144,6 +175,7 @@ def _build_report(
     attempted_requests: int,
     regions_attempted: list[str],
     first_429: dict[str, object] | None,
+    non_200: dict[str, object] | None = None,
     reason: str | None = None,
     error_type: str | None = None,
 ) -> dict[str, object]:
@@ -166,6 +198,8 @@ def _build_report(
         report["reason"] = reason
     if error_type is not None:
         report["error_type"] = error_type
+    if non_200 is not None:
+        report["non_200"] = non_200
     return report
 
 
@@ -218,6 +252,17 @@ async def _run_with_request_fn(
                                 first_429=first_429,
                             )
                         if status_code != 200:
+                            headers_obj = getattr(response, "headers", {})
+                            headers = cast(Mapping[str, str], headers_obj)
+                            headers_subset = _extract_non_200_headers(headers)
+                            non_200: dict[str, object] = {
+                                "http_status": status_code,
+                                "region_code": region_code,
+                                "property_type": property_type,
+                                "trade_type": trade_type,
+                                "request_index": request_index,
+                                "response_headers_subset": headers_subset,
+                            }
                             return _build_report(
                                 args=args,
                                 executed_at=executed_at,
@@ -226,12 +271,14 @@ async def _run_with_request_fn(
                                 attempted_requests=request_index,
                                 regions_attempted=regions_attempted,
                                 first_429=None,
+                                non_200=non_200,
                                 reason=(
                                     "Unexpected HTTP status "
                                     f"{status_code} at request_index={request_index} "
                                     f"(region_code={region_code}, "
                                     f"property_type={property_type}, "
-                                    f"trade_type={trade_type})"
+                                    f"trade_type={trade_type}, "
+                                    f"location={headers_subset.get('location')})"
                                 ),
                                 error_type="HTTPStatusError",
                             )
@@ -264,7 +311,11 @@ async def _run(args: CliArgs, request_fn: RequestFn | None = None) -> dict[str, 
         return await _run_with_request_fn(args, request_fn)
 
     timeout = httpx.Timeout(args.timeout_seconds)
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with httpx.AsyncClient(
+        timeout=timeout,
+        headers=_build_request_headers(),
+        follow_redirects=False,
+    ) as client:
 
         async def client_request_fn(**kwargs: object) -> object:
             return await _request_articles_once(

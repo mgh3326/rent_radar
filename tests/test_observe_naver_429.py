@@ -144,6 +144,44 @@ async def test_run_reports_error_on_non_429_http_status() -> None:
     assert seen_calls == [1]
 
 
+async def test_non_429_error_report_includes_location_header() -> None:
+    async def fake_request(
+        *,
+        region_code: str,
+        property_type: str,
+        trade_type: str,
+        request_index: int,
+    ) -> DummyResponse:
+        _ = region_code
+        _ = property_type
+        _ = trade_type
+        _ = request_index
+        return DummyResponse(
+            302,
+            headers={
+                "Location": "https://new.land.naver.com/",
+                "X-RateLimit-Remaining": "0",
+            },
+        )
+
+    args = observer.CliArgs(
+        region_codes=["11680"],
+        property_types=["APT"],
+        max_regions=1,
+        requests_per_region=2,
+        timeout_seconds=5.0,
+        fingerprint="stage6-observe-test",
+    )
+    report = await observer._run(args, request_fn=fake_request)
+
+    assert report["status"] == "error"
+    assert report["result"] == "failure"
+    assert report["non_200"]["http_status"] == 302
+    assert report["non_200"]["response_headers_subset"]["location"] == (
+        "https://new.land.naver.com/"
+    )
+
+
 async def test_rate_limited_report_contains_context_and_headers() -> None:
     async def fake_request(
         *,
@@ -195,6 +233,13 @@ async def test_rate_limited_report_contains_context_and_headers() -> None:
         "x-ratelimit-remaining": "0",
         "x-ratelimit-reset": "1739836800",
     }
+
+
+async def test_build_request_headers_include_browser_like_values() -> None:
+    headers = observer._build_request_headers()
+    assert headers["User-Agent"].startswith("Mozilla/5.0")
+    assert headers["Referer"] == "https://new.land.naver.com/articles"
+    assert headers["Accept"] == "application/json, text/plain, */*"
 
 
 async def test_invalid_cli_values_raise_parser_error(
