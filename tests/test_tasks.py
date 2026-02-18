@@ -8,10 +8,13 @@ import pytest
 
 import src.taskiq_app.tasks as task_module
 from src.crawlers.base import CrawlResult
+from src.crawlers.naver import NaverCrawler
 from src.crawlers.zigbang import ZigbangSchemaMismatchError
 from src.db.repositories import ListingUpsert
 from src.taskiq_app.tasks import (
+    crawl_naver_listings,
     crawl_zigbang_listings,
+    enqueue_crawl_naver_listings,
     enqueue_crawl_zigbang_listings,
 )
 
@@ -40,8 +43,12 @@ def _sample_listing() -> ListingUpsert:
 async def test_removed_task_paths_not_exposed() -> None:
     assert not hasattr(task_module, "crawl_real_trade")
     assert not hasattr(task_module, "enqueue_crawl_real_trade")
-    assert not hasattr(task_module, "crawl_naver_listings")
-    assert not hasattr(task_module, "enqueue_crawl_naver_listings")
+
+
+@pytest.mark.anyio
+async def test_naver_task_paths_exposed() -> None:
+    assert hasattr(task_module, "crawl_naver_listings")
+    assert hasattr(task_module, "enqueue_crawl_naver_listings")
 
 
 @pytest.mark.anyio
@@ -167,3 +174,62 @@ async def test_crawl_zigbang_schema_mismatch_fails_before_upsert(
 
     assert result.is_err
     assert called["persist"] == 0
+
+
+@pytest.mark.anyio
+async def test_crawl_naver_listings_returns_error_on_exhausted_429(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    released: list[str] = []
+
+    async def fake_run(self: NaverCrawler) -> CrawlResult[ListingUpsert]:
+        _ = self
+        return CrawlResult(
+            count=0,
+            rows=[],
+            errors=[
+                "HTTP 429 exhausted retries for region_code=11110, property_type=APT, trade_type=B1"
+            ],
+        )
+
+    async def fake_lock(key: str, ttl_seconds: int) -> bool:  # noqa: ARG001
+        return True
+
+    async def fake_release(key: str) -> None:
+        released.append(key)
+
+    monkeypatch.setattr("src.crawlers.naver.NaverCrawler.run", fake_run)
+    monkeypatch.setattr("src.taskiq_app.tasks.acquire_dedup_lock", fake_lock)
+    monkeypatch.setattr("src.taskiq_app.tasks.release_dedup_lock", fake_release)
+
+    task_fn = cast(Any, crawl_naver_listings)
+    task = await task_fn.kiq()
+    result = await task.wait_result(timeout=30)
+
+    assert not result.is_err
+    assert result.return_value["source"] == "naver"
+    assert result.return_value["status"] == "error"
+    assert result.return_value["count"] == 0
+    assert "429 exhausted retries" in cast(str, result.return_value["reason"])
+    assert result.return_value["errors_count"] == 1
+    assert released
+
+
+@pytest.mark.anyio
+async def test_enqueue_crawl_naver_listings_dedup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class DummyTask:
+        task_id: str = "naver-task-123"
+
+    async def fake_kiq(*args: object, **kwargs: object):  # noqa: ARG001
+        return DummyTask()
+
+    task_fn = cast(Any, crawl_naver_listings)
+    monkeypatch.setattr(task_fn, "kiq", fake_kiq)
+
+    first = await enqueue_crawl_naver_listings(fingerprint="manual-test")
+    second = await enqueue_crawl_naver_listings(fingerprint="manual-test")
+
+    assert first == {"enqueued": True, "task_id": "naver-task-123"}
+    assert second == {"enqueued": False, "reason": "duplicate_enqueue"}

@@ -4,6 +4,7 @@ import logging
 from typing import Any, cast
 
 from src.config import get_settings
+from src.crawlers.naver import NaverCrawler
 from src.crawlers.zigbang import ZigbangCrawler
 from src.db.repositories import (
     ListingUpsert,
@@ -75,6 +76,62 @@ async def crawl_zigbang_listings() -> dict[str, object]:
         await release_dedup_lock(dedup_key)
 
 
+@broker.task(
+    task_name="crawl_naver_listings",
+    schedule=[{"cron": "0 */6 * * *"}],
+    retry_on_error=True,
+    max_retries=3,
+)
+async def crawl_naver_listings() -> dict[str, object]:
+    dedup_key = build_dedup_key(
+        scope="execution", task_name="crawl_naver_listings", fingerprint="default"
+    )
+    lock_acquired = await acquire_dedup_lock(
+        dedup_key, settings.crawl_dedup_ttl_seconds
+    )
+    if not lock_acquired:
+        logger.info("crawl_naver_listings skipped due to dedup lock")
+        return {
+            "source": "naver",
+            "count": 0,
+            "status": "skipped_duplicate_execution",
+        }
+
+    try:
+        crawler = NaverCrawler(region_codes=list(settings.target_region_codes))
+        result = await crawler.run()
+
+        if result.errors:
+            return {
+                "source": "naver",
+                "count": 0,
+                "fetched": result.count,
+                "status": "error",
+                "reason": result.errors[0],
+                "errors_count": len(result.errors),
+            }
+
+        inserted = await _persist_listings(result.rows)
+
+        async with session_context() as session:
+            deactivated = await deactivate_stale_listings(session, "naver", 48)
+
+        if inserted > 0:
+            notifier = TelegramNotifier()
+            message = f"네이버 매물 수집 완료\n\n총 {inserted}건 신규 매물 저장됨 (수집: {result.count}건, {deactivated}건 비활성화)"
+            await notifier.send(message, title="네이버 매물 크롤링 완료")
+
+        return {
+            "source": "naver",
+            "count": inserted,
+            "fetched": result.count,
+            "deactivated": deactivated,
+            "status": "ok",
+        }
+    finally:
+        await release_dedup_lock(dedup_key)
+
+
 async def enqueue_crawl_zigbang_listings(
     *, fingerprint: str = "manual"
 ) -> dict[str, object]:
@@ -90,6 +147,23 @@ async def enqueue_crawl_zigbang_listings(
         return {"enqueued": False, "reason": "duplicate_enqueue"}
 
     task_kicker = cast(Any, crawl_zigbang_listings)
+    task = await task_kicker.kiq()
+    return {"enqueued": True, "task_id": task.task_id}
+
+
+async def enqueue_crawl_naver_listings(
+    *, fingerprint: str = "manual"
+) -> dict[str, object]:
+    dedup_key = build_dedup_key(
+        scope="enqueue", task_name="crawl_naver_listings", fingerprint=fingerprint
+    )
+    lock_acquired = await acquire_dedup_lock(
+        dedup_key, settings.crawl_dedup_ttl_seconds
+    )
+    if not lock_acquired:
+        return {"enqueued": False, "reason": "duplicate_enqueue"}
+
+    task_kicker = cast(Any, crawl_naver_listings)
     task = await task_kicker.kiq()
     return {"enqueued": True, "task_id": task.task_id}
 

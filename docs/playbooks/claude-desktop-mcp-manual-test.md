@@ -77,6 +77,32 @@ Evidence fields to copy into roadmap:
 - `first_429.region_code` and `first_429.response_headers_subset`
 - `executed_at` and `fingerprint`
 
+## Stage 6 Naver Live Smoke (Phase 2)
+
+Run restored TaskIQ crawl-path smoke:
+
+```bash
+uv run python scripts/smoke_naver_live_crawl.py --fingerprint stage6-phase2-20260218
+```
+
+Success contract:
+- JSON only
+- `result=success`
+- `status=ok`
+- `task_result.count > 0`
+
+Failure interpretation:
+- `status=error` with `result=failure`: hard failure (for example HTTP 429 retry exhaustion)
+- `status=ok` with `task_result.count=0`: run succeeded but acceptance failed (`inserted > 0` not met)
+- `status=unexpected_payload`: task output contract drift
+
+Evidence fields to copy into roadmap:
+- `status`
+- `result`
+- `task_result.count`
+- `task_result.fetched`
+- `fingerprint` and `executed_at`
+
 ## Start MCP Server
 
 ```bash

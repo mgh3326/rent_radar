@@ -1,6 +1,6 @@
 # Rent Radar MCP Roadmap Checklist
 
-Last Updated: 2026-02-17
+Last Updated: 2026-02-18
 
 ## Checklist Rules
 - `[ ]` Not started
@@ -79,12 +79,12 @@ Last Updated: 2026-02-17
 - [x] Add observer report schema hardening and contract tests
   - Evidence: `uv run python -m pytest tests/test_observe_naver_429.py -q` -> `8 passed`; `uv run ruff check scripts/observe_naver_429.py tests/test_observe_naver_429.py` -> `All checks passed!`.
 
-### Phase 2 (Deferred)
-- [ ] Implement 429 policy (`Retry-After` first, fallback to exponential backoff + jitter)
-- [ ] Add request throttling strategy for region/property/trade loops
-- [ ] Define degraded status threshold + notification criteria
+### Phase 2 (In Progress)
+- [x] Implement 429 policy (`Retry-After` first, fallback to exponential backoff + jitter)
+- [x] Add request throttling strategy for region/property/trade loops
+- [x] Apply hard-failure status contract (`ok|skipped_duplicate_execution|error`, no degraded status)
 - [ ] Verify live success acceptance (`inserted > 0`) with dated evidence
-- [ ] Add Naver smoke test and runbook
+- [x] Add Naver smoke test and runbook
 
 ## Stage Completion Criteria
 - Stage is complete only when:
@@ -102,6 +102,7 @@ Last Updated: 2026-02-17
 ### Active Roadmap Evidence
 | Date | Stage/Item | Evidence |
 |---|---|---|
+| 2026-02-18 | Stage 6 phase-2 implementation verification (code+tests complete, live acceptance pending) | `uv run ruff check src/crawlers/naver.py src/taskiq_app/tasks.py scripts/smoke_naver_live_crawl.py tests/test_naver_crawler.py tests/test_tasks.py tests/test_smoke_naver_live_crawl.py` -> `All checks passed!`; `uv run pytest tests/test_naver_crawler.py tests/test_tasks.py tests/test_smoke_naver_live_crawl.py -q` -> `15 passed`; `uv run python scripts/smoke_naver_live_crawl.py --fingerprint stage6-phase2-20260218` -> `status=error`, `result=failure`, `task_result.count=0`, `reason=HTTP 429 exhausted retries ...` |
 | 2026-02-17 | Stage 6 phase-1 observer verification | `uv run python scripts/observe_naver_429.py --region-codes 11680 --property-types APT --max-regions 1 --requests-per-region 5 --fingerprint stage6-observe-20260217` -> `status=rate_limited`, `attempted_requests=1`, `first_429_at_request_index=1`, `retry_after=null`; `uv run python -m pytest tests/test_observe_naver_429.py -q` -> `8 passed`; `uv run ruff check scripts/observe_naver_429.py tests/test_observe_naver_429.py` -> `All checks passed!` |
 | 2026-02-16 | Archive baseline before hard delete | Archive branch: `archive/pre-zigbang-hard-delete-2026-02-16`, Archive tag: `archive-zigbang-hard-delete-base-2026-02-16` |
 | 2026-02-16 | Zigbang-only hard-delete verification | `uv run ruff check src tests scripts` -> `All checks passed`, retained suite `42 passed`, `uv run python scripts/e2e_zigbang_mcp_tool_suite.py --cleanup-scope source_only --mcp-limit 3` -> `status=success` |
