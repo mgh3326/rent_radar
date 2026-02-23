@@ -115,6 +115,12 @@ class CrawlSourceSnapshot:
 
 
 @dataclass(slots=True)
+class ListingRegionSourceFreshness:
+    total_count: int
+    last_seen_at: datetime | None
+
+
+@dataclass(slots=True)
 class DataQualityIssue:
     """Data quality issue detected by QA rules."""
 
@@ -141,6 +147,26 @@ def _start_ym(period_months: int) -> int:
     now = datetime.now(UTC)
     year, month = _subtract_months(now.year, now.month, period_months)
     return (year * 100) + month
+
+
+def _build_listing_region_predicate(region_code: str):
+    parts = region_code_to_parts(region_code)
+    if not parts:
+        return None
+
+    sido_name = parts["sido"]
+    sigungu_name = parts["sigungu"]
+    sigungu_compact = sigungu_name.replace(" ", "")
+    sigungu_aliases = parts["aliases"]
+    address_compact = func.replace(Listing.address, " ", "")
+    return and_(
+        Listing.address.ilike(f"%{sido_name}%"),
+        or_(
+            Listing.address.ilike(f"%{sigungu_name}%"),
+            address_compact.ilike(f"%{sigungu_compact}%"),
+            Listing.dong.in_(sigungu_aliases),
+        ),
+    )
 
 
 async def upsert_real_trades(session: AsyncSession, rows: list[RealTradeUpsert]) -> int:
@@ -655,25 +681,10 @@ async def fetch_listings(
         stmt = stmt.where(Listing.is_active == is_active)
 
     if region_code:
-        parts = region_code_to_parts(region_code)
-        if not parts:
+        region_predicate = _build_listing_region_predicate(region_code)
+        if region_predicate is None:
             return []
-
-        sido_name = parts["sido"]
-        sigungu_name = parts["sigungu"]
-        sigungu_compact = sigungu_name.replace(" ", "")
-        sigungu_aliases = parts["aliases"]
-        address_compact = func.replace(Listing.address, " ", "")
-        stmt = stmt.where(
-            and_(
-                Listing.address.ilike(f"%{sido_name}%"),
-                or_(
-                    Listing.address.ilike(f"%{sigungu_name}%"),
-                    address_compact.ilike(f"%{sigungu_compact}%"),
-                    Listing.dong.in_(sigungu_aliases),
-                ),
-            )
-        )
+        stmt = stmt.where(region_predicate)
 
     if dong:
         stmt = stmt.where(Listing.dong.ilike(f"%{dong}%"))
@@ -715,6 +726,38 @@ async def fetch_listings(
 
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def fetch_listing_region_source_freshness(
+    session: AsyncSession,
+    *,
+    region_code: str | None,
+    source: str = "zigbang",
+) -> ListingRegionSourceFreshness:
+    normalized_region_code = region_code.strip() if region_code else ""
+    if not normalized_region_code:
+        return ListingRegionSourceFreshness(total_count=0, last_seen_at=None)
+
+    region_predicate = _build_listing_region_predicate(normalized_region_code)
+    if region_predicate is None:
+        return ListingRegionSourceFreshness(total_count=0, last_seen_at=None)
+
+    stmt = (
+        select(
+            func.count(Listing.id).label("total_count"),
+            func.max(Listing.last_seen_at).label("last_seen_at"),
+        )
+        .where(Listing.source == source)
+        .where(region_predicate)
+    )
+
+    row = (await session.execute(stmt)).one()
+    total_count = int(row[0] or 0)
+    last_seen_at = cast(datetime | None, row[1])
+    return ListingRegionSourceFreshness(
+        total_count=total_count,
+        last_seen_at=last_seen_at,
+    )
 
 
 async def fetch_listings_by_ids(

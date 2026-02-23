@@ -15,6 +15,11 @@ settings = get_settings()
 EMPTY_RESULTS_MESSAGE = (
     "활성 매물은 listings 데이터 기준이며, 실거래 데이터(real_trades)와는 별개입니다."
 )
+CRAWL_STATUS_SOURCE = "zigbang"
+CRAWL_STALE_THRESHOLD_HOURS = 48
+CRAWL_NEEDED_MESSAGE = (
+    "해당 지역의 zigbang 매물 데이터가 없거나 오래되어 크롤링이 필요합니다."
+)
 
 
 def register_listing_tools(mcp: FastMCP) -> None:
@@ -36,6 +41,15 @@ def register_listing_tools(mcp: FastMCP) -> None:
         max_floor: int | None = None,
         limit: int = 50,
     ) -> dict[str, object]:
+        async def evaluate_crawl_status() -> dict[str, object]:
+            async with session_context() as session:
+                service = ListingService(session)
+                return await service.evaluate_crawl_status(
+                    region_code=region_code,
+                    stale_hours=CRAWL_STALE_THRESHOLD_HOURS,
+                    source=CRAWL_STATUS_SOURCE,
+                )
+
         cache_key = build_search_cache_key(
             region_code=region_code,
             dong=dong,
@@ -59,6 +73,13 @@ def register_listing_tools(mcp: FastMCP) -> None:
             if result.get("count") == 0 and "message" not in result:
                 result["message"] = EMPTY_RESULTS_MESSAGE
             result["cache_hit"] = True
+
+            crawl_status = await evaluate_crawl_status()
+            result["crawl_status"] = crawl_status
+            if crawl_status.get("needs_crawl") is True:
+                result["crawl_message"] = CRAWL_NEEDED_MESSAGE
+            else:
+                result.pop("crawl_message", None)
             return result
 
         async with session_context() as session:
@@ -78,6 +99,11 @@ def register_listing_tools(mcp: FastMCP) -> None:
                 max_floor=max_floor,
                 is_active=True,
                 limit=limit,
+            )
+            crawl_status = await service.evaluate_crawl_status(
+                region_code=region_code,
+                stale_hours=CRAWL_STALE_THRESHOLD_HOURS,
+                source=CRAWL_STATUS_SOURCE,
             )
 
         result: dict[str, object] = {
@@ -99,9 +125,12 @@ def register_listing_tools(mcp: FastMCP) -> None:
             "count": len(results),
             "items": results,
             "cache_hit": False,
+            "crawl_status": crawl_status,
         }
         if result["count"] == 0:
             result["message"] = EMPTY_RESULTS_MESSAGE
+        if crawl_status.get("needs_crawl") is True:
+            result["crawl_message"] = CRAWL_NEEDED_MESSAGE
 
         await cache_set(cache_key, result, settings.listing_cache_ttl_seconds)
         return result
