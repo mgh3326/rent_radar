@@ -1,7 +1,9 @@
 """Application settings loaded from environment variables."""
 
 import json
+from collections.abc import Callable
 from functools import lru_cache
+from typing import cast
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,7 +30,11 @@ class _CommaListSourceMixin:
                 return json.loads(value)
             except (json.JSONDecodeError, ValueError):
                 return [v.strip() for v in value.split(",") if v.strip()]
-        return super().prepare_field_value(field_name, field, value, value_is_complex)
+        prepare_field_value = cast(
+            Callable[[str, object, object, bool], object],
+            getattr(super(), "prepare_field_value"),
+        )
+        return prepare_field_value(field_name, field, value, value_is_complex)
 
 
 class _Env(_CommaListSourceMixin, EnvSettingsSource):
@@ -61,6 +67,8 @@ class Settings(BaseSettings):
     public_data_api_key: str = ""
     public_data_api_base_url: str = "https://apis.data.go.kr/1613000/"
     public_data_request_timeout_seconds: float = 10.0
+    kakao_rest_api_key: str = ""
+    kakao_local_timeout_seconds: float = 5.0
     public_data_fetch_months: int = Field(default=2, ge=1, le=24)
     target_property_types: list[str] = Field(default_factory=lambda: ["apt"])
     target_region_codes: list[str] = Field(default_factory=lambda: ["11110"])
