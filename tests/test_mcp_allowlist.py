@@ -14,6 +14,7 @@ ALL_TOOL_NAMES = {
     "list_favorites",
     "list_regions",
     "manage_favorites",
+    "recommend_by_place_query",
     "recommend_listings",
     "remove_favorite",
     "search_rent",
@@ -48,7 +49,7 @@ async def test_allowlist_off_registers_all_tools(
     tool_names = await _list_tool_names(mcp_server)
 
     assert tool_names == ALL_TOOL_NAMES
-    assert len(tool_names) == 8
+    assert len(tool_names) == 9
 
 
 @pytest.mark.anyio

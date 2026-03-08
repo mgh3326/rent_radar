@@ -20,7 +20,7 @@ TOOL_REGISTRATIONS: tuple[ToolRegistration, ...] = (
         ("add_favorite", "list_favorites", "remove_favorite", "manage_favorites"),
     ),
     (register_region_tools, ("list_regions", "search_regions")),
-    (register_recommendation_tools, ("recommend_listings",)),
+    (register_recommendation_tools, ("recommend_listings", "recommend_by_place_query")),
 )
 
 VALID_MCP_TOOL_NAMES = frozenset(

@@ -5,6 +5,9 @@ from decimal import Decimal
 from mcp.server.fastmcp import FastMCP
 
 from src.db.session import session_context
+from src.services.place_query_recommendation_service import (
+    PlaceQueryRecommendationService,
+)
 from src.services.recommendation_service import RecommendationService
 
 
@@ -70,5 +73,40 @@ def register_recommendation_tools(mcp: FastMCP) -> None:
                 min_floor=min_floor,
                 max_floor=max_floor,
                 limit=limit,
+            )
+            return result
+
+    @mcp.tool(name="recommend_by_place_query")
+    async def recommend_by_place_query(
+        place_query: str,
+        property_types: list[str] | None = None,
+        rent_type: str | None = None,
+        min_deposit: int | None = None,
+        max_deposit: int | None = None,
+        min_monthly_rent: int | None = None,
+        max_monthly_rent: int | None = None,
+        min_area: float | None = None,
+        max_area: float | None = None,
+        min_floor: int | None = None,
+        max_floor: int | None = None,
+        limit: int = 10,
+        resolved_dongs: list[dict[str, str]] | None = None,
+    ) -> dict[str, object]:
+        async with session_context() as session:
+            service = PlaceQueryRecommendationService(session)
+            result = await service.recommend_by_place_query(
+                place_query=place_query,
+                property_types=property_types,
+                rent_type=rent_type,
+                min_deposit=min_deposit,
+                max_deposit=max_deposit,
+                min_monthly_rent=min_monthly_rent,
+                max_monthly_rent=max_monthly_rent,
+                min_area=Decimal(str(min_area)) if min_area is not None else None,
+                max_area=Decimal(str(max_area)) if max_area is not None else None,
+                min_floor=min_floor,
+                max_floor=max_floor,
+                limit=limit,
+                resolved_dongs=resolved_dongs,
             )
             return result

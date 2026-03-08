@@ -13,6 +13,9 @@ import pytest
 from src.db.repositories import BaselineComparisonStats
 from src.mcp_server.server import create_mcp_server
 from src.mcp_server.tools import recommendation as recommendation_tools
+from src.services.place_query_recommendation_service import (
+    PlaceQueryRecommendationService,
+)
 
 
 def _normalize_payload(mapping: Mapping[object, object]) -> dict[str, object]:
@@ -72,6 +75,14 @@ async def test_recommend_listings_tool_is_registered() -> None:
     tool_names = {tool.name for tool in await mcp_server.list_tools()}
 
     assert "recommend_listings" in tool_names
+
+
+@pytest.mark.anyio
+async def test_recommend_by_place_query_tool_is_registered() -> None:
+    mcp_server = create_mcp_server()
+    tool_names = {tool.name for tool in await mcp_server.list_tools()}
+
+    assert "recommend_by_place_query" in tool_names
 
 
 @pytest.mark.anyio
@@ -162,3 +173,87 @@ async def test_recommend_listings_contract_defaults_fields_and_allowlist(
         "deal_delta_pct",
         "total_monthly_cost",
     } <= set(items[0])
+
+
+@pytest.mark.anyio
+async def test_recommend_by_place_query_contract_defaults_fields_and_allowlist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_kwargs: dict[str, object] = {}
+
+    @asynccontextmanager
+    async def fake_session_context() -> AsyncIterator[object]:
+        yield object()
+
+    async def fake_recommend_by_place_query(
+        self: Any,
+        **kwargs: Any,
+    ) -> dict[str, object]:
+        captured_kwargs.update(kwargs)
+        return {
+            "status": "clarification_needed",
+            "query": {
+                "place_query": kwargs["place_query"],
+                "resolved_dongs": kwargs.get("resolved_dongs"),
+                "limit": kwargs["limit"],
+            },
+            "count": 0,
+            "items": [],
+            "question": "무슨 동이 맞습니까?",
+            "clarification_groups": [
+                {
+                    "station_name": "평촌역",
+                    "options": [
+                        {
+                            "station_name": "평촌역",
+                            "region_code": "41190",
+                            "dong": "호계동",
+                            "label": "경기도 안양시 동안구 호계동",
+                        }
+                    ],
+                }
+            ],
+            "parsed_places": ["평촌역"],
+            "resolved_dongs": kwargs.get("resolved_dongs") or [],
+        }
+
+    monkeypatch.setattr(recommendation_tools, "session_context", fake_session_context)
+    monkeypatch.setattr(
+        PlaceQueryRecommendationService,
+        "recommend_by_place_query",
+        fake_recommend_by_place_query,
+        raising=False,
+    )
+
+    mcp_server = create_mcp_server(enabled_tools=["recommend_by_place_query"])
+    tool_names = {tool.name for tool in await mcp_server.list_tools()}
+    assert tool_names == {"recommend_by_place_query"}
+
+    result = await mcp_server.call_tool(
+        "recommend_by_place_query",
+        {
+            "place_query": "평촌역 주변에서 추천해줘",
+            "resolved_dongs": [
+                {
+                    "station_name": "평촌역",
+                    "region_code": "41190",
+                    "dong": "호계동",
+                }
+            ],
+            "limit": 5,
+        },
+    )
+    payload = _extract_payload(result)
+
+    assert captured_kwargs["place_query"] == "평촌역 주변에서 추천해줘"
+    assert captured_kwargs["limit"] == 5
+    assert captured_kwargs["resolved_dongs"] == [
+        {
+            "station_name": "평촌역",
+            "region_code": "41190",
+            "dong": "호계동",
+        }
+    ]
+    assert payload["status"] == "clarification_needed"
+    assert payload["question"] == "무슨 동이 맞습니까?"
+    assert payload["parsed_places"] == ["평촌역"]
