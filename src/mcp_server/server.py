@@ -5,8 +5,9 @@ from collections.abc import Callable
 from mcp.server.fastmcp import FastMCP
 
 from src.config import get_settings
-from src.mcp_server.tools.listing import register_listing_tools
 from src.mcp_server.tools.favorite import register_favorite_tools
+from src.mcp_server.tools.listing import register_listing_tools
+from src.mcp_server.tools.recommendation import register_recommendation_tools
 from src.mcp_server.tools.region import register_region_tools
 
 ToolRegistrar = Callable[[FastMCP], None]
@@ -19,6 +20,7 @@ TOOL_REGISTRATIONS: tuple[ToolRegistration, ...] = (
         ("add_favorite", "list_favorites", "remove_favorite", "manage_favorites"),
     ),
     (register_region_tools, ("list_regions", "search_regions")),
+    (register_recommendation_tools, ("recommend_listings",)),
 )
 
 VALID_MCP_TOOL_NAMES = frozenset(

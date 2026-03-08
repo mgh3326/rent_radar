@@ -14,6 +14,7 @@ ALL_TOOL_NAMES = {
     "list_favorites",
     "list_regions",
     "manage_favorites",
+    "recommend_listings",
     "remove_favorite",
     "search_rent",
     "search_regions",
@@ -47,7 +48,7 @@ async def test_allowlist_off_registers_all_tools(
     tool_names = await _list_tool_names(mcp_server)
 
     assert tool_names == ALL_TOOL_NAMES
-    assert len(tool_names) == 7
+    assert len(tool_names) == 8
 
 
 @pytest.mark.anyio
@@ -113,4 +114,5 @@ async def test_invalid_allowlist_value_fails_fast(
     assert "Invalid MCP_ENABLED_TOOLS entries" in error_message
     assert "not_a_real_tool" in error_message
     assert "Valid values are:" in error_message
+    assert "recommend_listings" in error_message
     assert "search_rent" in error_message
