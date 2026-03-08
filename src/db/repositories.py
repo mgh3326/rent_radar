@@ -121,6 +121,15 @@ class ListingRegionSourceFreshness:
 
 
 @dataclass(slots=True)
+class BaselineComparisonStats:
+    """Baseline statistics for recommendation comparison."""
+
+    avg_monthly_cost_per_m2: float
+    sample_count: int
+    scope: str  # "dong", "region", "fallback"
+
+
+@dataclass(slots=True)
 class DataQualityIssue:
     """Data quality issue detected by QA rules."""
 
@@ -1179,4 +1188,117 @@ async def fetch_data_quality_issues(
     blockers_first = sorted(
         issues, key=lambda x: (0 if x.severity == "blocker" else 1, x.table_name)
     )
+
     return blockers_first[:limit]
+
+
+async def fetch_baseline_comparison_stats(
+    session: AsyncSession,
+    *,
+    property_type: str,
+    dong: str | None,
+    area_m2: Decimal,
+    region_code: str,
+    source: str = "zigbang",
+    area_tolerance: Decimal = Decimal("5.0"),
+    min_samples: int = 3,
+) -> BaselineComparisonStats | None:
+    """Fetch baseline comparison statistics for a listing.
+
+    Priority for comparison group:
+    1. Same property_type + dong + area_m2 ± tolerance
+    2. Same property_type + region_code + area_m2 ± tolerance
+    3. Same property_type + region_code (all areas)
+
+    The baseline is calculated using:
+    - total_monthly_cost = monthly_rent + (deposit * 0.005)
+    - monthly_cost_per_m2 = total_monthly_cost / area_m2
+
+    Returns None if no valid samples exist.
+    """
+    if area_m2 is None or area_m2 <= 0:
+        return None
+
+    region_predicate = _build_listing_region_predicate(region_code)
+    if region_predicate is None:
+        return None
+
+    min_area = area_m2 - area_tolerance
+    max_area = area_m2 + area_tolerance
+
+    # Calculate monthly_cost_per_m2: (monthly_rent + deposit * 0.005) / area_m2
+    deposit_monthly_equiv = Listing.deposit * Decimal("0.005")
+    total_monthly_cost = Listing.monthly_rent + deposit_monthly_equiv
+    monthly_cost_per_m2_expr = func.avg(total_monthly_cost / Listing.area_m2)
+    sample_count_expr = func.count(Listing.id)
+
+    # Try Level 1: Same property_type + dong + area ± tolerance
+    if dong:
+        stmt = (
+            select(
+                monthly_cost_per_m2_expr.label("avg_monthly_cost_per_m2"),
+                sample_count_expr.label("sample_count"),
+            )
+            .where(Listing.property_type == property_type)
+            .where(Listing.dong == dong)
+            .where(Listing.area_m2 >= min_area)
+            .where(Listing.area_m2 <= max_area)
+            .where(Listing.area_m2 > 0)
+            .where(Listing.is_active == True)  # noqa: E712
+            .where(Listing.source == source)
+            .where(region_predicate)
+        )
+        result = await session.execute(stmt)
+        row = result.one()
+        if row.sample_count >= min_samples and row.avg_monthly_cost_per_m2 is not None:
+            return BaselineComparisonStats(
+                avg_monthly_cost_per_m2=float(row.avg_monthly_cost_per_m2),
+                sample_count=int(row.sample_count),
+                scope="dong",
+            )
+
+    # Try Level 2: Same property_type + region_code + area ± tolerance
+    stmt = (
+        select(
+            monthly_cost_per_m2_expr.label("avg_monthly_cost_per_m2"),
+            sample_count_expr.label("sample_count"),
+        )
+        .where(Listing.property_type == property_type)
+        .where(Listing.area_m2 >= min_area)
+        .where(Listing.area_m2 <= max_area)
+        .where(Listing.area_m2 > 0)
+        .where(Listing.is_active == True)  # noqa: E712
+        .where(Listing.source == source)
+        .where(region_predicate)
+    )
+    result = await session.execute(stmt)
+    row = result.one()
+    if row.sample_count >= min_samples and row.avg_monthly_cost_per_m2 is not None:
+        return BaselineComparisonStats(
+            avg_monthly_cost_per_m2=float(row.avg_monthly_cost_per_m2),
+            sample_count=int(row.sample_count),
+            scope="region",
+        )
+
+    # Try Level 3: Same property_type + region_code (all areas)
+    stmt = (
+        select(
+            monthly_cost_per_m2_expr.label("avg_monthly_cost_per_m2"),
+            sample_count_expr.label("sample_count"),
+        )
+        .where(Listing.property_type == property_type)
+        .where(Listing.area_m2 > 0)
+        .where(Listing.is_active == True)  # noqa: E712
+        .where(Listing.source == source)
+        .where(region_predicate)
+    )
+    result = await session.execute(stmt)
+    row = result.one()
+    if row.sample_count >= min_samples and row.avg_monthly_cost_per_m2 is not None:
+        return BaselineComparisonStats(
+            avg_monthly_cost_per_m2=float(row.avg_monthly_cost_per_m2),
+            sample_count=int(row.sample_count),
+            scope="fallback",
+        )
+
+    return None

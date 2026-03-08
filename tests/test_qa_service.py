@@ -138,6 +138,81 @@ async def test_fetch_data_quality_issues_detects_expected_rules() -> None:
 
 
 @pytest.mark.anyio
+async def test_fetch_data_quality_issues_respects_limit_after_blocker_sort() -> None:
+    now = datetime.now(UTC)
+    future = now + timedelta(days=2)
+
+    blocker = RealTrade(
+        id=3001,
+        property_type="apt",
+        rent_type="jeonse",
+        region_code="11110",
+        dong="사직동",
+        apt_name="차단아파트",
+        deposit=0,
+        monthly_rent=0,
+        area_m2=Decimal("84.90"),
+        floor=10,
+        contract_year=future.year,
+        contract_month=future.month,
+        contract_day=future.day,
+    )
+    warning_area = RealTrade(
+        id=3002,
+        property_type="apt",
+        rent_type="monthly",
+        region_code="11110",
+        dong="세종로",
+        apt_name="면적경고",
+        deposit=5000,
+        monthly_rent=50,
+        area_m2=Decimal("9.50"),
+        floor=4,
+        contract_year=now.year,
+        contract_month=now.month,
+        contract_day=max(1, now.day - 1),
+    )
+    warning_stale = Listing(
+        id=3003,
+        source="naver",
+        source_id="N-3003",
+        property_type="apt",
+        rent_type="jeonse",
+        deposit=30000,
+        monthly_rent=0,
+        address="서울 종로구 사직동",
+        dong="사직동",
+        detail_address=None,
+        area_m2=Decimal("59.95"),
+        floor=7,
+        total_floors=20,
+        description=None,
+        latitude=None,
+        longitude=None,
+        is_active=True,
+        last_seen_at=now - timedelta(days=8),
+        first_seen_at=now - timedelta(days=10),
+    )
+
+    session = _FakeSession(
+        [
+            _FakeExecuteResult(scalar_rows=[blocker]),
+            _FakeExecuteResult(scalar_rows=[warning_area]),
+            _FakeExecuteResult(scalar_rows=[warning_stale]),
+        ]
+    )
+
+    issues = await fetch_data_quality_issues(
+        cast(AsyncSession, cast(object, session)),
+        limit=2,
+    )
+
+    assert len(issues) == 2
+    assert [issue.severity for issue in issues] == ["blocker", "warning"]
+    assert [issue.id for issue in issues] == [3001, 3003]
+
+
+@pytest.mark.anyio
 async def test_qa_service_summary_counts_and_deployment_flag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
