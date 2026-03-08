@@ -9,6 +9,9 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.repositories import BaselineComparisonStats
+from src.services.place_query_recommendation_service import (
+    PlaceQueryRecommendationService,
+)
 from src.services.recommendation_service import RecommendationService
 
 
@@ -319,3 +322,544 @@ async def test_recommend_listings_normalizes_region_code_for_candidates_and_base
     assert result["status"] == "success"
     assert captured_candidate_region_codes == ["11110"]
     assert captured_baseline_region_codes == ["11110"]
+
+
+def _make_ranked_item(
+    *,
+    item_id: int,
+    source_id: str,
+    recommendation_score: int,
+    total_monthly_cost: int,
+    last_seen_at: str,
+) -> dict[str, object]:
+    return {
+        "id": item_id,
+        "source": "zigbang_test_seed",
+        "source_id": source_id,
+        "property_type": "villa",
+        "rent_type": "monthly",
+        "deposit": 10000,
+        "monthly_rent": 50,
+        "address": "서울 종로구 사직동",
+        "dong": "사직동",
+        "detail_address": None,
+        "area_m2": 40.0,
+        "floor": 5,
+        "total_floors": 10,
+        "description": "sample",
+        "latitude": 37.572,
+        "longitude": 126.976,
+        "is_active": True,
+        "first_seen_at": "2026-03-01T00:00:00+00:00",
+        "last_seen_at": last_seen_at,
+        "created_at": "2026-03-01T00:00:00+00:00",
+        "updated_at": "2026-03-07T00:00:00+00:00",
+        "rank": 99,
+        "recommendation_score": recommendation_score,
+        "total_monthly_cost": total_monthly_cost,
+        "monthly_cost_per_m2": 1000.0,
+        "baseline_monthly_cost_per_m2": 1100.0,
+        "deal_delta_pct": 10.0,
+        "baseline_scope": "region",
+        "baseline_sample_count": 5,
+        "recommendation_reasons": ["sample"],
+    }
+
+
+@pytest.mark.anyio
+async def test_recommend_by_place_query_returns_clarification_needed_from_resolver() -> (
+    None
+):
+    class FakeResolver:
+        async def resolve(self, place_query: str) -> dict[str, object]:
+            assert place_query == "평촌역"
+            return {
+                "status": "clarification_needed",
+                "parsed_places": ["평촌역"],
+                "resolved_dongs": [],
+                "question": "무슨 동이 맞습니까?",
+                "clarification_groups": [
+                    {
+                        "station_name": "평촌역",
+                        "options": [
+                            {
+                                "station_name": "평촌역",
+                                "region_code": "41190",
+                                "dong": "호계동",
+                                "label": "경기도 안양시 동안구 호계동",
+                            }
+                        ],
+                    }
+                ],
+            }
+
+    service = PlaceQueryRecommendationService(
+        cast(AsyncSession, object()),
+        place_query_resolver=FakeResolver(),
+    )
+
+    result = await service.recommend_by_place_query(place_query="평촌역")
+
+    assert result["status"] == "clarification_needed"
+    assert result["count"] == 0
+    assert result["items"] == []
+    assert result["question"] == "무슨 동이 맞습니까?"
+    assert result["parsed_places"] == ["평촌역"]
+
+
+@pytest.mark.anyio
+async def test_recommend_by_place_query_auto_resolves_single_candidate_and_reuses_recommendations() -> (
+    None
+):
+    class FakeResolver:
+        async def resolve(self, place_query: str) -> dict[str, object]:
+            assert place_query == "평촌역 주변 추천"
+            return {
+                "status": "resolved",
+                "parsed_places": ["평촌역"],
+                "resolved_dongs": [
+                    {
+                        "station_name": "평촌역",
+                        "region_code": "41190",
+                        "dong": "호계동",
+                        "label": "경기도 안양시 동안구 호계동",
+                    }
+                ],
+                "clarification_groups": [],
+            }
+
+    class FakeRecommendationService:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str | None]] = []
+
+        async def evaluate_crawl_status(
+            self, *, region_code: str | None, **kwargs: Any
+        ) -> dict[str, object]:
+            _ = kwargs
+            return {
+                "source": "zigbang",
+                "region_code": region_code,
+                "evaluated": True,
+                "needs_crawl": False,
+                "reason": "fresh_data",
+                "last_seen_at": "2026-03-07T00:00:00+00:00",
+                "stale_threshold_hours": 48,
+            }
+
+        async def recommend_listings(self, **kwargs: Any) -> dict[str, object]:
+            self.calls.append((kwargs["region_code"], kwargs.get("dong")))
+            return {
+                "status": "success",
+                "query": kwargs,
+                "count": 1,
+                "items": [
+                    _make_ranked_item(
+                        item_id=21,
+                        source_id="seed-21",
+                        recommendation_score=87,
+                        total_monthly_cost=910,
+                        last_seen_at="2026-03-07T09:00:00+00:00",
+                    )
+                ],
+                "crawl_status": {
+                    "needs_crawl": False,
+                    "reason": "fresh_data",
+                },
+            }
+
+    fake_recommendation_service = FakeRecommendationService()
+    service = PlaceQueryRecommendationService(
+        cast(AsyncSession, object()),
+        place_query_resolver=FakeResolver(),
+        recommendation_service=fake_recommendation_service,
+    )
+
+    result = await service.recommend_by_place_query(place_query="평촌역 주변 추천")
+
+    assert fake_recommendation_service.calls == [("41190", "호계동")]
+    assert result["status"] == "success"
+    assert result["parsed_places"] == ["평촌역"]
+    assert result["count"] == 1
+    assert [item["id"] for item in cast(list[dict[str, object]], result["items"])] == [
+        21
+    ]
+
+
+@pytest.mark.anyio
+async def test_recommend_by_place_query_uses_resolved_dongs_without_resolver_and_deduplicates_items() -> (
+    None
+):
+    class ForbiddenResolver:
+        async def resolve(self, place_query: str) -> dict[str, object]:
+            raise AssertionError(
+                f"resolver must not be called when resolved_dongs is provided: {place_query}"
+            )
+
+    class FakeRecommendationService:
+        async def evaluate_crawl_status(
+            self, *, region_code: str | None, **kwargs: Any
+        ) -> dict[str, object]:
+            _ = kwargs
+            return {
+                "source": "zigbang",
+                "region_code": region_code,
+                "evaluated": True,
+                "needs_crawl": False,
+                "reason": "fresh_data",
+                "last_seen_at": "2026-03-07T00:00:00+00:00",
+                "stale_threshold_hours": 48,
+            }
+
+        async def recommend_listings(self, **kwargs: Any) -> dict[str, object]:
+            if kwargs["dong"] == "호계동":
+                items = [
+                    _make_ranked_item(
+                        item_id=10,
+                        source_id="seed-10",
+                        recommendation_score=90,
+                        total_monthly_cost=950,
+                        last_seen_at="2026-03-07T08:00:00+00:00",
+                    ),
+                    _make_ranked_item(
+                        item_id=11,
+                        source_id="seed-11",
+                        recommendation_score=80,
+                        total_monthly_cost=980,
+                        last_seen_at="2026-03-07T07:00:00+00:00",
+                    ),
+                ]
+            else:
+                items = [
+                    _make_ranked_item(
+                        item_id=10,
+                        source_id="seed-10",
+                        recommendation_score=90,
+                        total_monthly_cost=950,
+                        last_seen_at="2026-03-07T08:00:00+00:00",
+                    ),
+                    _make_ranked_item(
+                        item_id=12,
+                        source_id="seed-12",
+                        recommendation_score=95,
+                        total_monthly_cost=920,
+                        last_seen_at="2026-03-07T09:00:00+00:00",
+                    ),
+                ]
+            return {
+                "status": "success",
+                "query": kwargs,
+                "count": len(items),
+                "items": items,
+                "crawl_status": {
+                    "needs_crawl": False,
+                    "reason": "fresh_data",
+                },
+            }
+
+    service = PlaceQueryRecommendationService(
+        cast(AsyncSession, object()),
+        place_query_resolver=ForbiddenResolver(),
+        recommendation_service=FakeRecommendationService(),
+    )
+
+    result = await service.recommend_by_place_query(
+        place_query="평촌역, 범계역 주변에서 추천해줘",
+        resolved_dongs=[
+            {
+                "station_name": "평촌역",
+                "region_code": "41190",
+                "dong": "호계동",
+            },
+            {
+                "station_name": "범계역",
+                "region_code": "41190",
+                "dong": "평촌동",
+            },
+        ],
+        limit=5,
+    )
+
+    items = cast(list[dict[str, object]], result["items"])
+    assert result["status"] == "success"
+    assert result["count"] == 3
+    assert [item["id"] for item in items] == [12, 10, 11]
+    assert [item["rank"] for item in items] == [1, 2, 3]
+
+
+@pytest.mark.anyio
+async def test_recommend_by_place_query_returns_needs_crawl_when_any_target_is_stale() -> (
+    None
+):
+    class ForbiddenResolver:
+        async def resolve(self, place_query: str) -> dict[str, object]:
+            raise AssertionError(
+                f"resolver must not be called when resolved_dongs is provided: {place_query}"
+            )
+
+    class FakeRecommendationService:
+        async def evaluate_crawl_status(
+            self, *, region_code: str | None, **kwargs: Any
+        ) -> dict[str, object]:
+            _ = kwargs
+            if region_code == "11680":
+                return {
+                    "source": "zigbang",
+                    "region_code": region_code,
+                    "evaluated": True,
+                    "needs_crawl": True,
+                    "reason": "stale_data",
+                    "last_seen_at": "2026-03-01T00:00:00+00:00",
+                    "stale_threshold_hours": 48,
+                }
+            return {
+                "source": "zigbang",
+                "region_code": region_code,
+                "evaluated": True,
+                "needs_crawl": False,
+                "reason": "fresh_data",
+                "last_seen_at": "2026-03-07T00:00:00+00:00",
+                "stale_threshold_hours": 48,
+            }
+
+        async def recommend_listings(self, **kwargs: Any) -> dict[str, object]:
+            raise AssertionError(f"recommend_listings must not run: {kwargs}")
+
+    service = PlaceQueryRecommendationService(
+        cast(AsyncSession, object()),
+        place_query_resolver=ForbiddenResolver(),
+        recommendation_service=FakeRecommendationService(),
+    )
+
+    result = await service.recommend_by_place_query(
+        place_query="평촌역, 강남역 주변에서 추천해줘",
+        resolved_dongs=[
+            {
+                "station_name": "평촌역",
+                "region_code": "41190",
+                "dong": "호계동",
+            },
+            {
+                "station_name": "강남역",
+                "region_code": "11680",
+                "dong": "역삼동",
+            },
+        ],
+    )
+
+    assert result["status"] == "needs_crawl"
+    assert result["count"] == 0
+    assert result["items"] == []
+    assert isinstance(result["crawl_message"], str)
+    assert result["crawl_targets"] == [
+        {
+            "station_name": "강남역",
+            "region_code": "11680",
+            "dong": "역삼동",
+            "reason": "stale_data",
+            "last_seen_at": "2026-03-01T00:00:00+00:00",
+        }
+    ]
+
+
+@pytest.mark.anyio
+async def test_recommend_by_place_query_returns_needs_crawl_when_any_target_has_no_dong_data() -> (
+    None
+):
+    class ForbiddenResolver:
+        async def resolve(self, place_query: str) -> dict[str, object]:
+            raise AssertionError(
+                f"resolver must not be called when resolved_dongs is provided: {place_query}"
+            )
+
+    class FakeRecommendationService:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str | None]] = []
+
+        async def evaluate_crawl_status(
+            self, *, region_code: str | None, **kwargs: Any
+        ) -> dict[str, object]:
+            _ = kwargs
+            return {
+                "source": "zigbang",
+                "region_code": region_code,
+                "evaluated": True,
+                "needs_crawl": False,
+                "reason": "fresh_data",
+                "last_seen_at": "2026-03-07T00:00:00+00:00",
+                "stale_threshold_hours": 48,
+            }
+
+        async def recommend_listings(self, **kwargs: Any) -> dict[str, object]:
+            self.calls.append((kwargs["region_code"], kwargs.get("dong")))
+            if kwargs.get("dong") == "역삼동":
+                return {
+                    "status": "success",
+                    "query": kwargs,
+                    "count": 0,
+                    "items": [],
+                    "crawl_status": {
+                        "needs_crawl": False,
+                        "reason": "fresh_data",
+                    },
+                }
+
+            return {
+                "status": "success",
+                "query": kwargs,
+                "count": 1,
+                "items": [
+                    _make_ranked_item(
+                        item_id=21,
+                        source_id="seed-21",
+                        recommendation_score=87,
+                        total_monthly_cost=910,
+                        last_seen_at="2026-03-07T09:00:00+00:00",
+                    )
+                ],
+                "crawl_status": {
+                    "needs_crawl": False,
+                    "reason": "fresh_data",
+                },
+            }
+
+    fake_recommendation_service = FakeRecommendationService()
+    service = PlaceQueryRecommendationService(
+        cast(AsyncSession, object()),
+        place_query_resolver=ForbiddenResolver(),
+        recommendation_service=fake_recommendation_service,
+    )
+
+    result = await service.recommend_by_place_query(
+        place_query="평촌역, 강남역 주변에서 추천해줘",
+        resolved_dongs=[
+            {
+                "station_name": "평촌역",
+                "region_code": "41190",
+                "dong": "호계동",
+            },
+            {
+                "station_name": "강남역",
+                "region_code": "11680",
+                "dong": "역삼동",
+            },
+        ],
+    )
+
+    assert fake_recommendation_service.calls == [
+        ("41190", "호계동"),
+        ("11680", "역삼동"),
+    ]
+    assert result["status"] == "needs_crawl"
+    assert result["count"] == 0
+    assert result["items"] == []
+    assert isinstance(result["crawl_message"], str)
+    assert result["crawl_targets"] == [
+        {
+            "station_name": "강남역",
+            "region_code": "11680",
+            "dong": "역삼동",
+            "reason": "no_dong_data",
+            "last_seen_at": None,
+        }
+    ]
+
+
+@pytest.mark.anyio
+async def test_recommend_by_place_query_returns_needs_crawl_when_any_target_reports_zero_count() -> (
+    None
+):
+    class ForbiddenResolver:
+        async def resolve(self, place_query: str) -> dict[str, object]:
+            raise AssertionError(
+                f"resolver must not be called when resolved_dongs is provided: {place_query}"
+            )
+
+    class FakeRecommendationService:
+        async def evaluate_crawl_status(
+            self, *, region_code: str | None, **kwargs: Any
+        ) -> dict[str, object]:
+            _ = kwargs
+            return {
+                "source": "zigbang",
+                "region_code": region_code,
+                "evaluated": True,
+                "needs_crawl": False,
+                "reason": "fresh_data",
+                "last_seen_at": "2026-03-07T00:00:00+00:00",
+                "stale_threshold_hours": 48,
+            }
+
+        async def recommend_listings(self, **kwargs: Any) -> dict[str, object]:
+            if kwargs.get("dong") == "역삼동":
+                return {
+                    "status": "success",
+                    "query": kwargs,
+                    "count": 0,
+                    "items": [
+                        _make_ranked_item(
+                            item_id=31,
+                            source_id="seed-31",
+                            recommendation_score=90,
+                            total_monthly_cost=900,
+                            last_seen_at="2026-03-07T10:00:00+00:00",
+                        )
+                    ],
+                    "crawl_status": {
+                        "needs_crawl": False,
+                        "reason": "fresh_data",
+                    },
+                }
+
+            return {
+                "status": "success",
+                "query": kwargs,
+                "count": 1,
+                "items": [
+                    _make_ranked_item(
+                        item_id=21,
+                        source_id="seed-21",
+                        recommendation_score=87,
+                        total_monthly_cost=910,
+                        last_seen_at="2026-03-07T09:00:00+00:00",
+                    )
+                ],
+                "crawl_status": {
+                    "needs_crawl": False,
+                    "reason": "fresh_data",
+                },
+            }
+
+    service = PlaceQueryRecommendationService(
+        cast(AsyncSession, object()),
+        place_query_resolver=ForbiddenResolver(),
+        recommendation_service=FakeRecommendationService(),
+    )
+
+    result = await service.recommend_by_place_query(
+        place_query="평촌역, 강남역 주변에서 추천해줘",
+        resolved_dongs=[
+            {
+                "station_name": "평촌역",
+                "region_code": "41190",
+                "dong": "호계동",
+            },
+            {
+                "station_name": "강남역",
+                "region_code": "11680",
+                "dong": "역삼동",
+            },
+        ],
+    )
+
+    assert result["status"] == "needs_crawl"
+    assert result["count"] == 0
+    assert result["items"] == []
+    assert result["crawl_targets"] == [
+        {
+            "station_name": "강남역",
+            "region_code": "11680",
+            "dong": "역삼동",
+            "reason": "no_dong_data",
+            "last_seen_at": None,
+        }
+    ]
