@@ -79,6 +79,7 @@ Claude Desktop 또는 MCP 클라이언트에서 사용 가능:
 
 **Available Tools:**
 - `search_rent` - 임대 매물 검색 (`listings` 기반, 캐시 적용, 0건 시 데이터 소스 안내 메시지 포함)
+- `recommend_listings` - 오피스텔·빌라 추천 (시세 대비 ㎡당 환산월세 점수화)
 - `add_favorite`, `remove_favorite`, `list_favorites`, `manage_favorites` - 관심매물 관리
 - `list_regions`, `search_regions` - 지역 정보
 
